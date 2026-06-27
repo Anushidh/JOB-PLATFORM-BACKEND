@@ -1,0 +1,40 @@
+import { Router } from 'express';
+import authRoutes from './auth.routes';
+import userRoutes from './user.routes';
+import jobRoutes from './job.routes';
+import applicationRoutes from './application.routes';
+import companyRoutes from './company.routes';
+import adminRoutes from './admin.routes';
+import notificationRoutes from './notification.routes';
+import uploadRoutes from './upload.routes';
+import savedJobRoutes from './savedJob.routes';
+import messageRoutes from './message.routes';
+import analyticsRoutes from './analytics.routes';
+import subscriptionRoutes from './subscription.routes';
+import oauthRoutes from './oauth.routes';
+import jobAlertRoutes from './jobAlert.routes';
+import aiRoutes from './ai.routes';
+import profileViewRoutes from './profileView.routes';
+import companyFollowRoutes from './companyFollow.routes';
+
+const router = Router();
+
+router.use('/auth', authRoutes);
+router.use('/auth/oauth', oauthRoutes);
+router.use('/users', userRoutes);
+router.use('/jobs', jobRoutes);
+router.use('/applications', applicationRoutes);
+router.use('/companies', companyRoutes);
+router.use('/admin', adminRoutes);
+router.use('/notifications', notificationRoutes);
+router.use('/uploads', uploadRoutes);
+router.use('/saved-jobs', savedJobRoutes);
+router.use('/messages', messageRoutes);
+router.use('/analytics', analyticsRoutes);
+router.use('/subscriptions', subscriptionRoutes);
+router.use('/job-alerts', jobAlertRoutes);
+router.use('/ai', aiRoutes);
+router.use('/profile-views', profileViewRoutes);
+router.use('/company-follows', companyFollowRoutes);
+
+export default router;
