@@ -17,7 +17,7 @@ const CompanySchema = new Schema<ICompany>(
     foundedYear: { type: Number },
     owner: {
       type: Schema.Types.ObjectId,
-      ref: 'User',
+      ref: 'Employer',
       required: true,
     },
   },

@@ -1,13 +1,13 @@
 import { Request, Response, NextFunction } from 'express';
-import companyService from '../services/company.service';
+import { CompanyService } from '../services/company.service';
 import { ApiResponse } from '../utils/apiResponse';
-import { AuthRequest } from '../types';
 import { DEFAULT_PAGE, DEFAULT_LIMIT } from '../utils/constants';
 
-class CompanyController {
-  async createCompany(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+export class CompanyController {
+  constructor(private readonly companyService: CompanyService) {}
+  async createCompany(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const company = await companyService.createCompany(req.userId!, req.body);
+      const company = await this.companyService.createCompany(req.userId!, req.body);
       ApiResponse.created(res, { company }, 'Company created successfully');
     } catch (error) {
       next(error);
@@ -16,16 +16,16 @@ class CompanyController {
 
   async getCompany(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const company = await companyService.getCompanyById(req.params.companyId);
+      const company = await this.companyService.getCompanyById(req.params.companyId);
       ApiResponse.success(res, { company }, 'Company retrieved successfully');
     } catch (error) {
       next(error);
     }
   }
 
-  async updateCompany(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  async updateCompany(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const company = await companyService.updateCompany(
+      const company = await this.companyService.updateCompany(
         req.params.companyId,
         req.userId!,
         req.body
@@ -36,9 +36,9 @@ class CompanyController {
     }
   }
 
-  async deleteCompany(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  async deleteCompany(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      await companyService.deleteCompany(req.params.companyId, req.userId!);
+      await this.companyService.deleteCompany(req.params.companyId, req.userId!);
       ApiResponse.success(res, null, 'Company deleted successfully');
     } catch (error) {
       next(error);
@@ -54,16 +54,16 @@ class CompanyController {
       const search = req.query.search as string;
       const industry = req.query.industry as string;
 
-      const result = await companyService.getCompanies({ page, limit, sort, order }, search, industry);
+      const result = await this.companyService.getCompanies({ page, limit, sort, order }, search, industry);
       ApiResponse.paginated(res, result.data, result.pagination.total, page, limit);
     } catch (error) {
       next(error);
     }
   }
 
-  async getMyCompany(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  async getMyCompany(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const company = await companyService.getMyCompany(req.userId!);
+      const company = await this.companyService.getMyCompany(req.userId!);
       ApiResponse.success(res, { company }, 'Company retrieved successfully');
     } catch (error) {
       next(error);
@@ -71,4 +71,3 @@ class CompanyController {
   }
 }
 
-export default new CompanyController();

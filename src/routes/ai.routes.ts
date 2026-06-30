@@ -1,7 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import aiController from '../controllers/ai.controller';
-import { authenticate } from '../middleware/auth';
+import { aiController, authenticate } from '../container';
 import { roleGuard } from '../middleware/roleGuard';
 import { validate } from '../middleware/validate';
 import { UserRole } from '../types';
@@ -53,14 +52,14 @@ router.post(
   '/parse-resume',
   roleGuard(UserRole.EMPLOYEE),
   uploadResumePdf,
-  aiController.parseResume as any
+  aiController.parseResume
 );
 
 // Apply parsed resume data to profile
 router.post(
   '/apply-parsed-resume',
   roleGuard(UserRole.EMPLOYEE),
-  aiController.applyParsedResume as any
+  aiController.applyParsedResume
 );
 
 // Generate cover letter for a job
@@ -68,14 +67,14 @@ router.post(
   '/generate-cover-letter',
   roleGuard(UserRole.EMPLOYEE),
   validate(generateCoverLetterSchema),
-  aiController.generateCoverLetter as any
+  aiController.generateCoverLetter
 );
 
 // Get match score for a job
 router.get(
   '/match-score/:jobId',
   roleGuard(UserRole.EMPLOYEE),
-  aiController.getMatchScore as any
+  aiController.getMatchScore
 );
 
 // --- Employer AI features ---
@@ -85,14 +84,14 @@ router.post(
   '/generate-job-description',
   roleGuard(UserRole.EMPLOYER),
   validate(generateJobDescriptionSchema),
-  aiController.generateJobDescription as any
+  aiController.generateJobDescription
 );
 
 // Get applicant match score
 router.get(
   '/applicant-match/:jobId/:applicantId',
   roleGuard(UserRole.EMPLOYER),
-  aiController.getApplicantMatchScore as any
+  aiController.getApplicantMatchScore
 );
 
 export default router;

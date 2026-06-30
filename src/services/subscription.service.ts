@@ -1,12 +1,12 @@
 import Razorpay from 'razorpay';
 import crypto from 'crypto';
-import Subscription, { ISubscription, PlanType, SubscriptionStatus } from '../models/Subscription';
+import { ISubscription, PlanType, SubscriptionStatus } from '../models/Subscription';
 import { ApiError } from '../utils/apiError';
 import env from '../config/env';
-import invoiceService from './invoice.service';
-import emailService from './email.service';
-import Employee from '../models/Employee';
-import Employer from '../models/Employer';
+import { SubscriptionRepository } from '../repositories/subscription.repository';
+import { AdminRepository } from '../repositories/admin.repository';
+import { InvoiceService } from './invoice.service';
+import { EmailService } from './email.service';
 import { UserRole } from '../types';
 
 const razorpay = new Razorpay({
@@ -19,13 +19,8 @@ interface PlanDetails {
   name: string;
   amount: number;
   currency: string;
-  duration: number; // in days
-  gst: {
-    rate: number;
-    baseAmount: number;
-    cgst: number;
-    sgst: number;
-  };
+  duration: number;
+  gst: { rate: number; baseAmount: number; cgst: number; sgst: number };
   features: {
     maxJobPosts?: number;
     maxApplications?: number;
@@ -53,73 +48,54 @@ const PLANS: PlanDetails[] = [
     currency: 'INR',
     duration: 365,
     gst: { rate: 0, baseAmount: 0, cgst: 0, sgst: 0 },
-    features: {
-      maxJobPosts: 3,
-      maxApplications: 10,
-      premiumPlacement: false,
-      resumeAccess: false,
-      analyticsAccess: false,
-    },
+    features: { maxJobPosts: 3, maxApplications: 10, premiumPlacement: false, resumeAccess: false, analyticsAccess: false },
   },
   {
     type: PlanType.BASIC,
     name: 'Basic',
-    amount: 99900, // ₹999 inclusive of GST
+    amount: 99900,
     currency: 'INR',
     duration: 30,
     gst: calculateGst(99900),
-    features: {
-      maxJobPosts: 10,
-      maxApplications: 50,
-      premiumPlacement: false,
-      resumeAccess: true,
-      analyticsAccess: true,
-    },
+    features: { maxJobPosts: 10, maxApplications: 50, premiumPlacement: false, resumeAccess: true, analyticsAccess: true },
   },
   {
     type: PlanType.PREMIUM,
     name: 'Premium',
-    amount: 249900, // ₹2499 inclusive of GST
+    amount: 249900,
     currency: 'INR',
     duration: 30,
     gst: calculateGst(249900),
-    features: {
-      maxJobPosts: 50,
-      maxApplications: 200,
-      premiumPlacement: true,
-      resumeAccess: true,
-      analyticsAccess: true,
-    },
+    features: { maxJobPosts: 50, maxApplications: 200, premiumPlacement: true, resumeAccess: true, analyticsAccess: true },
   },
   {
     type: PlanType.ENTERPRISE,
     name: 'Enterprise',
-    amount: 999900, // ₹9999 inclusive of GST
+    amount: 999900,
     currency: 'INR',
     duration: 30,
     gst: calculateGst(999900),
-    features: {
-      maxJobPosts: undefined, // unlimited
-      maxApplications: undefined, // unlimited
-      premiumPlacement: true,
-      resumeAccess: true,
-      analyticsAccess: true,
-    },
+    features: { maxJobPosts: undefined, maxApplications: undefined, premiumPlacement: true, resumeAccess: true, analyticsAccess: true },
   },
 ];
 
-class SubscriptionService {
-  /** Returns the list of available subscription plans with features and pricing */
+export class SubscriptionService {
+  constructor(
+    private readonly subscriptionRepository: SubscriptionRepository,
+    private readonly adminRepository: AdminRepository,
+    private readonly invoiceService: InvoiceService,
+    private readonly emailService: EmailService,
+  ) {}
+
   getPlans(): PlanDetails[] {
     return PLANS;
   }
 
-  /** Creates a Razorpay payment order and a pending subscription record */
   async createOrder(
     userId: string,
     userRole: string,
-    planType: PlanType
-  ): Promise<{ order: any; subscription: ISubscription }> {
+    planType: PlanType,
+  ): Promise<{ order: unknown; subscription: ISubscription }> {
     const plan = PLANS.find((p) => p.type === planType);
     if (!plan) {
       throw ApiError.badRequest('Invalid plan type');
@@ -129,30 +105,20 @@ class SubscriptionService {
       throw ApiError.badRequest('Free plan does not require payment');
     }
 
-    // Check if user already has an active subscription
-    const existingSubscription = await Subscription.findOne({
-      user: userId,
-      status: SubscriptionStatus.ACTIVE,
-    });
+    const existingSubscription = await this.subscriptionRepository.findActiveByUser(userId);
 
     if (existingSubscription) {
       throw ApiError.conflict('You already have an active subscription. Cancel it first to switch plans.');
     }
 
-    // Create Razorpay order
     const order = await razorpay.orders.create({
       amount: plan.amount,
       currency: plan.currency,
       receipt: `sub_${userId}_${Date.now()}`,
-      notes: {
-        userId,
-        userRole,
-        planType,
-      },
+      notes: { userId, userRole, planType },
     });
 
-    // Create pending subscription record
-    const subscription = await Subscription.create({
+    const subscription = await this.subscriptionRepository.create({
       user: userId,
       userRole,
       plan: planType,
@@ -166,13 +132,11 @@ class SubscriptionService {
     return { order, subscription };
   }
 
-  /** Verifies Razorpay payment signature, activates the subscription, and sends an invoice email */
   async verifyPayment(
     razorpayOrderId: string,
     razorpayPaymentId: string,
-    razorpaySignature: string
+    razorpaySignature: string,
   ): Promise<ISubscription> {
-    // Verify signature
     const body = `${razorpayOrderId}|${razorpayPaymentId}`;
     const expectedSignature = crypto
       .createHmac('sha256', env.RAZORPAY_KEY_SECRET)
@@ -183,21 +147,18 @@ class SubscriptionService {
       throw ApiError.badRequest('Invalid payment signature');
     }
 
-    // Find pending subscription
-    const subscription = await Subscription.findOne({
+    const subscription = await this.subscriptionRepository.findOneByOrderId(
       razorpayOrderId,
-      status: SubscriptionStatus.PENDING,
-    });
+      SubscriptionStatus.PENDING,
+    );
 
     if (!subscription) {
       throw ApiError.notFound('Subscription not found or already processed');
     }
 
-    // Get plan details for duration
     const plan = PLANS.find((p) => p.type === subscription.plan);
     const duration = plan ? plan.duration : 30;
 
-    // Activate subscription
     const now = new Date();
     const endDate = new Date(now.getTime() + duration * 24 * 60 * 60 * 1000);
 
@@ -207,38 +168,30 @@ class SubscriptionService {
     subscription.endDate = endDate;
     await subscription.save();
 
-    // Send invoice email asynchronously
     this.sendInvoiceEmail(subscription).catch((err) =>
-      console.error('[Invoice] Failed to send invoice email:', err)
+      console.error('[Invoice] Failed to send invoice email:', err),
     );
 
     return subscription;
   }
 
-  /** Generates a PDF invoice and emails it to the subscriber */
   private async sendInvoiceEmail(subscription: ISubscription): Promise<void> {
-    let email = '';
-    let name = '';
+    const user = await this.adminRepository.findUserBasicInfo(
+      subscription.user.toString(),
+      subscription.userRole as UserRole,
+    );
 
-    if (subscription.userRole === UserRole.EMPLOYEE) {
-      const user = await Employee.findById(subscription.user);
-      if (user) { email = user.email; name = user.firstName; }
-    } else if (subscription.userRole === UserRole.EMPLOYER) {
-      const user = await Employer.findById(subscription.user);
-      if (user) { email = user.email; name = user.firstName; }
-    }
+    if (!user?.email) return;
 
-    if (!email) return;
-
-    const pdfBuffer = await invoiceService.generateInvoicePdf(subscription);
+    const pdfBuffer = await this.invoiceService.generateInvoicePdf(subscription);
     const amount = (subscription.amount / 100).toLocaleString('en-IN');
 
-    await emailService.sendWithAttachment(
-      email,
+    await this.emailService.sendWithAttachment(
+      user.email,
       'Payment Confirmation & Invoice - Job Platform',
       `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <h2 style="color: #333;">Hi ${name},</h2>
+          <h2 style="color: #333;">Hi ${user.firstName},</h2>
           <p>Thank you for your payment! Your <strong>${subscription.plan}</strong> plan is now active.</p>
           <p><strong>Amount:</strong> ₹${amount}</p>
           <p><strong>Valid until:</strong> ${subscription.endDate.toLocaleDateString('en-IN', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
@@ -254,19 +207,13 @@ class SubscriptionService {
         filename: `invoice-${subscription._id}.pdf`,
         content: pdfBuffer,
         contentType: 'application/pdf',
-      }]
+      }],
     );
   }
 
-  /** Returns the user's current active subscription, or null if expired/missing */
   async getUserSubscription(userId: string): Promise<ISubscription | null> {
-    const subscription = await Subscription.findOne({
-      user: userId,
-      status: SubscriptionStatus.ACTIVE,
-      endDate: { $gte: new Date() },
-    }).sort({ createdAt: -1 });
+    const subscription = await this.subscriptionRepository.findActiveValidByUser(userId);
 
-    // Check if subscription has expired
     if (subscription && subscription.endDate < new Date()) {
       subscription.status = SubscriptionStatus.EXPIRED;
       await subscription.save();
@@ -276,12 +223,8 @@ class SubscriptionService {
     return subscription;
   }
 
-  /** Cancels the user's active subscription immediately */
   async cancelSubscription(userId: string): Promise<ISubscription> {
-    const subscription = await Subscription.findOne({
-      user: userId,
-      status: SubscriptionStatus.ACTIVE,
-    });
+    const subscription = await this.subscriptionRepository.findActiveSubscription(userId);
 
     if (!subscription) {
       throw ApiError.notFound('No active subscription found');
@@ -293,9 +236,7 @@ class SubscriptionService {
     return subscription;
   }
 
-  /** Handles Razorpay webhook events (payment captured, failed, subscription cancelled) */
-  async webhookHandler(payload: any, signature: string): Promise<void> {
-    // Verify webhook signature
+  async webhookHandler(payload: unknown, signature: string): Promise<void> {
     const expectedSignature = crypto
       .createHmac('sha256', env.RAZORPAY_WEBHOOK_SECRET)
       .update(JSON.stringify(payload))
@@ -305,17 +246,24 @@ class SubscriptionService {
       throw ApiError.badRequest('Invalid webhook signature');
     }
 
-    const event = payload.event;
-    const paymentEntity = payload.payload?.payment?.entity;
+    const body = payload as {
+      event: string;
+      payload?: {
+        payment?: { entity?: { order_id?: string; id?: string } };
+        subscription?: { entity?: { id?: string } };
+      };
+    };
+
+    const event = body.event;
+    const paymentEntity = body.payload?.payment?.entity;
 
     switch (event) {
       case 'payment.captured': {
-        // Payment successful - activate subscription if not already done
         if (paymentEntity?.order_id) {
-          const subscription = await Subscription.findOne({
-            razorpayOrderId: paymentEntity.order_id,
-            status: SubscriptionStatus.PENDING,
-          });
+          const subscription = await this.subscriptionRepository.findOneByOrderId(
+            paymentEntity.order_id,
+            SubscriptionStatus.PENDING,
+          );
 
           if (subscription) {
             const plan = PLANS.find((p) => p.type === subscription.plan);
@@ -334,12 +282,11 @@ class SubscriptionService {
       }
 
       case 'payment.failed': {
-        // Payment failed - mark subscription as cancelled
         if (paymentEntity?.order_id) {
-          const subscription = await Subscription.findOne({
-            razorpayOrderId: paymentEntity.order_id,
-            status: SubscriptionStatus.PENDING,
-          });
+          const subscription = await this.subscriptionRepository.findOneByOrderId(
+            paymentEntity.order_id,
+            SubscriptionStatus.PENDING,
+          );
 
           if (subscription) {
             subscription.status = SubscriptionStatus.CANCELLED;
@@ -350,12 +297,11 @@ class SubscriptionService {
       }
 
       case 'subscription.cancelled': {
-        const subscriptionEntity = payload.payload?.subscription?.entity;
+        const subscriptionEntity = body.payload?.subscription?.entity;
         if (subscriptionEntity?.id) {
-          const subscription = await Subscription.findOne({
-            razorpaySubscriptionId: subscriptionEntity.id,
-            status: SubscriptionStatus.ACTIVE,
-          });
+          const subscription = await this.subscriptionRepository.findByRazorpaySubscriptionId(
+            subscriptionEntity.id,
+          );
 
           if (subscription) {
             subscription.status = SubscriptionStatus.CANCELLED;
@@ -370,5 +316,3 @@ class SubscriptionService {
     }
   }
 }
-
-export default new SubscriptionService();

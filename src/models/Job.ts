@@ -19,7 +19,7 @@ const JobSchema = new Schema<IJob>(
     },
     employer: {
       type: Schema.Types.ObjectId,
-      ref: 'User',
+      ref: 'Employer',
       required: true,
     },
     salaryMin: { type: Number },

@@ -1,14 +1,12 @@
 import { Router } from 'express';
-import profileViewController from '../controllers/profileView.controller';
-import { authenticate } from '../middleware/auth';
-import { requireSubscription } from '../middleware/requireSubscription';
+import { profileViewController, authenticate, requireSubscription } from '../container';
 
 const router = Router();
 
 // View count is available for everyone
-router.get('/count', authenticate, profileViewController.getMyViewCount as any);
+router.get('/count', authenticate, profileViewController.getMyViewCount);
 
 // Seeing WHO viewed requires Premium+
-router.get('/viewers', authenticate, requireSubscription('profileViewers'), profileViewController.getMyProfileViewers as any);
+router.get('/viewers', authenticate, requireSubscription('profileViewers'), profileViewController.getMyProfileViewers);
 
 export default router;

@@ -1,8 +1,8 @@
 import OpenAI from 'openai';
 import pdf from 'pdf-parse';
 import env from '../config/env';
-import Employee from '../models/Employee';
-import Job from '../models/Job';
+import { UserRepository } from '../repositories/user.repository';
+import { JobRepository } from '../repositories/job.repository';
 import { ApiError } from '../utils/apiError';
 import { IEmployee, IJob } from '../types';
 
@@ -48,7 +48,11 @@ interface MatchScore {
   summary: string;
 }
 
-class AIService {
+export class AIService {
+  constructor(
+    private readonly userRepository: UserRepository,
+    private readonly jobRepository: JobRepository,
+  ) {}
   /** Extracts text from a PDF buffer using pdf-parse */
   async extractTextFromPdf(pdfBuffer: Buffer): Promise<string> {
     const data = await (pdf as any)(pdfBuffer);
@@ -164,18 +168,18 @@ Keep it professional, concise, and engaging. Do NOT include salary information i
 
   /** Generates a personalized cover letter based on employee profile and job details */
   async generateCoverLetter(employeeId: string, jobId: string): Promise<string> {
-    const [employee, job] = await Promise.all([
-      Employee.findById(employeeId),
-      Job.findById(jobId).populate('company', 'name industry'),
-    ]);
+    const employee = await this.userRepository.findEmployeeById(employeeId);
+    const jobDoc = await this.jobRepository.findById(jobId);
 
     if (!employee) {
       throw ApiError.notFound('Employee profile not found');
     }
 
-    if (!job) {
+    if (!jobDoc) {
       throw ApiError.notFound('Job not found');
     }
+
+    const job = await jobDoc.populate('company', 'name industry');
 
     const companyName = (job.company as any)?.name || 'the company';
 
@@ -380,4 +384,3 @@ Keep it professional but personable. Don't be generic.`;
   }
 }
 
-export default new AIService();

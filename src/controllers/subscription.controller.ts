@@ -1,38 +1,42 @@
 import { Request, Response, NextFunction } from 'express';
-import subscriptionService from '../services/subscription.service';
-import invoiceService from '../services/invoice.service';
-import Subscription, { SubscriptionStatus } from '../models/Subscription';
+import { SubscriptionService } from '../services/subscription.service';
+import { InvoiceService } from '../services/invoice.service';
+import { SubscriptionRepository } from '../repositories/subscription.repository';
 import { ApiResponse } from '../utils/apiResponse';
 import { ApiError } from '../utils/apiError';
-import { AuthRequest } from '../types';
 
-class SubscriptionController {
+export class SubscriptionController {
+  constructor(
+    private readonly subscriptionService: SubscriptionService,
+    private readonly invoiceService: InvoiceService,
+    private readonly subscriptionRepository: SubscriptionRepository,
+  ) {}
   async getPlans(_req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const plans = subscriptionService.getPlans();
+      const plans = this.subscriptionService.getPlans();
       ApiResponse.success(res, plans, 'Plans retrieved successfully');
     } catch (error) {
       next(error);
     }
   }
 
-  async createOrder(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  async createOrder(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const userId = req.userId!;
       const userRole = req.userRole!;
       const { planType } = req.body;
 
-      const result = await subscriptionService.createOrder(userId, userRole, planType);
+      const result = await this.subscriptionService.createOrder(userId, userRole, planType);
       ApiResponse.success(res, result, 'Order created successfully');
     } catch (error) {
       next(error);
     }
   }
 
-  async verifyPayment(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  async verifyPayment(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { razorpayOrderId, razorpayPaymentId, razorpaySignature } = req.body;
-      const subscription = await subscriptionService.verifyPayment(
+      const subscription = await this.subscriptionService.verifyPayment(
         razorpayOrderId,
         razorpayPaymentId,
         razorpaySignature
@@ -44,10 +48,10 @@ class SubscriptionController {
     }
   }
 
-  async getMySubscription(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  async getMySubscription(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const userId = req.userId!;
-      const subscription = await subscriptionService.getUserSubscription(userId);
+      const subscription = await this.subscriptionService.getUserSubscription(userId);
 
       ApiResponse.success(res, subscription, subscription ? 'Subscription retrieved' : 'No active subscription');
     } catch (error) {
@@ -55,10 +59,10 @@ class SubscriptionController {
     }
   }
 
-  async cancelSubscription(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  async cancelSubscription(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const userId = req.userId!;
-      const subscription = await subscriptionService.cancelSubscription(userId);
+      const subscription = await this.subscriptionService.cancelSubscription(userId);
 
       ApiResponse.success(res, subscription, 'Subscription cancelled successfully');
     } catch (error) {
@@ -69,7 +73,7 @@ class SubscriptionController {
   async webhook(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const signature = req.headers['x-razorpay-signature'] as string;
-      await subscriptionService.webhookHandler(req.body, signature);
+      await this.subscriptionService.webhookHandler(req.body, signature);
 
       // Always return 200 to Razorpay
       res.status(200).json({ status: 'ok' });
@@ -80,11 +84,11 @@ class SubscriptionController {
     }
   }
 
-  async downloadInvoice(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  async downloadInvoice(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { subscriptionId } = req.params;
 
-      const subscription = await Subscription.findById(subscriptionId);
+      const subscription = await this.subscriptionRepository.findById(subscriptionId);
       if (!subscription) {
         throw ApiError.notFound('Subscription not found');
       }
@@ -99,7 +103,7 @@ class SubscriptionController {
         throw ApiError.badRequest('No payment found for this subscription');
       }
 
-      const pdfBuffer = await invoiceService.generateInvoicePdf(subscription);
+      const pdfBuffer = await this.invoiceService.generateInvoicePdf(subscription);
 
       res.set({
         'Content-Type': 'application/pdf',
@@ -114,4 +118,3 @@ class SubscriptionController {
   }
 }
 
-export default new SubscriptionController();

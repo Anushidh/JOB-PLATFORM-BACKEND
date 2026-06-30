@@ -1,40 +1,29 @@
-import mongoose from 'mongoose';
-import JobAnalytics, { IJobAnalytics } from '../models/JobAnalytics';
-import Job from '../models/Job';
+import mongoose, { type ClientSession } from 'mongoose';
 import { ApiError } from '../utils/apiError';
+import { JobAnalyticsRepository } from '../repositories/jobAnalytics.repository';
+import { JobRepository } from '../repositories/job.repository';
+import { IJobAnalytics } from '../models/JobAnalytics';
 
-class AnalyticsService {
+export class AnalyticsService {
+  constructor(
+    private readonly jobAnalyticsRepository: JobAnalyticsRepository,
+    private readonly jobRepository: JobRepository,
+  ) {}
+
   private getTodayStart(): Date {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     return today;
   }
 
-  /** Returns or creates a JobAnalytics document for the given job */
-  private async getOrCreateAnalytics(jobId: string): Promise<IJobAnalytics> {
-    let analytics = await JobAnalytics.findOne({ job: jobId });
-    if (!analytics) {
-      analytics = await JobAnalytics.create({
-        job: jobId,
-        views: 0,
-        uniqueViews: 0,
-        clicks: 0,
-        applications: 0,
-        viewedBy: [],
-        dailyStats: [],
-      });
-    }
-    return analytics;
-  }
-
-  /** Increments today's daily stat entry for the specified metric */
   private async updateDailyStat(
     analytics: IJobAnalytics,
-    field: 'views' | 'clicks' | 'applications'
+    field: 'views' | 'clicks' | 'applications',
+    session?: ClientSession,
   ): Promise<void> {
     const today = this.getTodayStart();
     const dailyStat = analytics.dailyStats.find(
-      (stat) => stat.date.getTime() === today.getTime()
+      (stat) => stat.date.getTime() === today.getTime(),
     );
 
     if (dailyStat) {
@@ -48,26 +37,23 @@ class AnalyticsService {
       });
     }
 
-    await analytics.save();
+    await analytics.save(session ? { session } : undefined);
   }
 
-  /** Records a job view, tracking unique viewers by ID */
   async trackView(jobId: string, viewerId?: string): Promise<void> {
-    const job = await Job.findById(jobId);
+    const job = await this.jobRepository.findById(jobId);
     if (!job) {
       throw ApiError.notFound('Job not found');
     }
 
-    const analytics = await this.getOrCreateAnalytics(jobId);
+    const analytics = await this.jobAnalyticsRepository.getOrCreate(jobId);
 
-    // Increment total views
     analytics.views += 1;
 
-    // Track unique views if viewerId is provided
     if (viewerId) {
       const viewerObjectId = new mongoose.Types.ObjectId(viewerId);
       const alreadyViewed = analytics.viewedBy.some(
-        (id) => id.toString() === viewerId
+        (id) => id.toString() === viewerId,
       );
       if (!alreadyViewed) {
         analytics.viewedBy.push(viewerObjectId);
@@ -79,36 +65,32 @@ class AnalyticsService {
     await this.updateDailyStat(analytics, 'views');
   }
 
-  /** Increments the click count for a job listing */
   async trackClick(jobId: string): Promise<void> {
-    const job = await Job.findById(jobId);
+    const job = await this.jobRepository.findById(jobId);
     if (!job) {
       throw ApiError.notFound('Job not found');
     }
 
-    const analytics = await this.getOrCreateAnalytics(jobId);
+    const analytics = await this.jobAnalyticsRepository.getOrCreate(jobId);
     analytics.clicks += 1;
     await analytics.save();
     await this.updateDailyStat(analytics, 'clicks');
   }
 
-  /** Increments the application count in job analytics */
-  async trackApplication(jobId: string): Promise<void> {
-    const job = await Job.findById(jobId);
+  async trackApplication(jobId: string, session?: ClientSession): Promise<void> {
+    const job = await this.jobRepository.findById(jobId);
     if (!job) {
       throw ApiError.notFound('Job not found');
     }
 
-    const analytics = await this.getOrCreateAnalytics(jobId);
+    const analytics = await this.jobAnalyticsRepository.getOrCreate(jobId, session);
     analytics.applications += 1;
-    await analytics.save();
-    await this.updateDailyStat(analytics, 'applications');
+    await analytics.save(session ? { session } : undefined);
+    await this.updateDailyStat(analytics, 'applications', session);
   }
 
-  /** Returns analytics for a specific job after verifying the employer owns it */
   async getJobAnalytics(jobId: string, employerId: string): Promise<IJobAnalytics | null> {
-    // Verify employer owns this job
-    const job = await Job.findById(jobId);
+    const job = await this.jobRepository.findById(jobId);
     if (!job) {
       throw ApiError.notFound('Job not found');
     }
@@ -117,16 +99,14 @@ class AnalyticsService {
       throw ApiError.forbidden('You do not have access to this job\'s analytics');
     }
 
-    const analytics = await JobAnalytics.findOne({ job: jobId });
+    const analytics = await this.jobAnalyticsRepository.findByJob(jobId);
     if (!analytics) {
-      // Return empty analytics object
-      return await this.getOrCreateAnalytics(jobId);
+      return this.jobAnalyticsRepository.getOrCreate(jobId);
     }
 
     return analytics;
   }
 
-  /** Aggregates analytics across all employer's jobs including conversion rates and per-job breakdown */
   async getEmployerDashboardAnalytics(employerId: string): Promise<{
     totalJobs: number;
     totalViews: number;
@@ -135,16 +115,9 @@ class AnalyticsService {
     totalApplications: number;
     clickThroughRate: number;
     applicationRate: number;
-    jobStats: {
-      jobId: string;
-      title: string;
-      views: number;
-      clicks: number;
-      applications: number;
-    }[];
+    jobStats: { jobId: string; title: string; views: number; clicks: number; applications: number }[];
   }> {
-    // Get all jobs for this employer
-    const jobs = await Job.find({ employer: employerId }).select('_id title');
+    const jobs = await this.jobRepository.findByEmployerSelect(employerId, '_id title');
 
     if (jobs.length === 0) {
       return {
@@ -161,19 +134,7 @@ class AnalyticsService {
 
     const jobIds = jobs.map((job) => job._id);
 
-    // Aggregate analytics across all employer's jobs
-    const aggregation = await JobAnalytics.aggregate([
-      { $match: { job: { $in: jobIds } } },
-      {
-        $group: {
-          _id: null,
-          totalViews: { $sum: '$views' },
-          totalUniqueViews: { $sum: '$uniqueViews' },
-          totalClicks: { $sum: '$clicks' },
-          totalApplications: { $sum: '$applications' },
-        },
-      },
-    ]);
+    const aggregation = await this.jobAnalyticsRepository.aggregateByJobs(jobIds);
 
     const totals = aggregation[0] || {
       totalViews: 0,
@@ -182,11 +143,10 @@ class AnalyticsService {
       totalApplications: 0,
     };
 
-    // Get per-job stats
-    const analyticsList = await JobAnalytics.find({ job: { $in: jobIds } });
+    const analyticsList = await this.jobAnalyticsRepository.findByJobs(jobIds);
     const jobStats = jobs.map((job) => {
       const jobAnalytic = analyticsList.find(
-        (a) => a.job.toString() === job._id.toString()
+        (a) => a.job.toString() === job._id.toString(),
       );
       return {
         jobId: job._id.toString(),
@@ -197,7 +157,6 @@ class AnalyticsService {
       };
     });
 
-    // Calculate conversion rates
     const clickThroughRate = totals.totalViews > 0
       ? parseFloat(((totals.totalClicks / totals.totalViews) * 100).toFixed(2))
       : 0;
@@ -217,5 +176,3 @@ class AnalyticsService {
     };
   }
 }
-
-export default new AnalyticsService();

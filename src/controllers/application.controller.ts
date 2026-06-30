@@ -1,13 +1,14 @@
-import { Response, NextFunction } from 'express';
-import applicationService from '../services/application.service';
+import { Request, Response, NextFunction } from 'express';
+import { ApplicationService } from '../services/application.service';
 import { ApiResponse } from '../utils/apiResponse';
-import { AuthRequest, ApplicationStatus } from '../types';
+import { ApplicationStatus } from '../types';
 import { DEFAULT_PAGE, DEFAULT_LIMIT } from '../utils/constants';
 
-class ApplicationController {
-  async applyToJob(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+export class ApplicationController {
+  constructor(private readonly applicationService: ApplicationService) {}
+  async applyToJob(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const application = await applicationService.applyToJob({
+      const application = await this.applicationService.applyToJob({
         jobId: req.params.jobId,
         applicantId: req.userId!,
         coverLetter: req.body.coverLetter,
@@ -19,16 +20,16 @@ class ApplicationController {
     }
   }
 
-  async getApplication(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  async getApplication(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const application = await applicationService.getApplicationById(req.params.applicationId);
+      const application = await this.applicationService.getApplicationById(req.params.applicationId);
       ApiResponse.success(res, { application }, 'Application retrieved successfully');
     } catch (error) {
       next(error);
     }
   }
 
-  async getMyApplications(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  async getMyApplications(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const page = parseInt(req.query.page as string) || DEFAULT_PAGE;
       const limit = parseInt(req.query.limit as string) || DEFAULT_LIMIT;
@@ -36,7 +37,7 @@ class ApplicationController {
       const order = req.query.order as 'asc' | 'desc';
       const status = req.query.status as string;
 
-      const result = await applicationService.getMyApplications(
+      const result = await this.applicationService.getMyApplications(
         req.userId!,
         { page, limit, sort, order },
         status
@@ -47,7 +48,7 @@ class ApplicationController {
     }
   }
 
-  async getJobApplications(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  async getJobApplications(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const page = parseInt(req.query.page as string) || DEFAULT_PAGE;
       const limit = parseInt(req.query.limit as string) || DEFAULT_LIMIT;
@@ -55,7 +56,7 @@ class ApplicationController {
       const order = req.query.order as 'asc' | 'desc';
       const status = req.query.status as string;
 
-      const result = await applicationService.getJobApplications(
+      const result = await this.applicationService.getJobApplications(
         req.params.jobId,
         req.userId!,
         { page, limit, sort, order },
@@ -67,10 +68,10 @@ class ApplicationController {
     }
   }
 
-  async updateApplicationStatus(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  async updateApplicationStatus(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { status, note } = req.body;
-      const application = await applicationService.updateApplicationStatus(
+      const application = await this.applicationService.updateApplicationStatus(
         req.params.applicationId,
         req.userId!,
         status as ApplicationStatus,
@@ -82,9 +83,9 @@ class ApplicationController {
     }
   }
 
-  async withdrawApplication(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  async withdrawApplication(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const application = await applicationService.withdrawApplication(
+      const application = await this.applicationService.withdrawApplication(
         req.params.applicationId,
         req.userId!
       );
@@ -93,6 +94,18 @@ class ApplicationController {
       next(error);
     }
   }
+
+  async getApplicationResumeDownloadUrl(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const signedUrl = await this.applicationService.getApplicationResumeDownloadUrl(
+        req.params.applicationId,
+        req.userId!,
+        req.userRole!,
+      );
+      ApiResponse.success(res, signedUrl, 'Signed resume URL generated');
+    } catch (error) {
+      next(error);
+    }
+  }
 }
 
-export default new ApplicationController();

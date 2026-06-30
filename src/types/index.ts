@@ -1,4 +1,3 @@
-import { Request } from 'express';
 import { Document, Types } from 'mongoose';
 
 // User Roles
@@ -89,6 +88,7 @@ export interface IEmployee extends IBaseUser {
   education?: IEducation[];
   portfolioLinks?: string[];
   resumePath?: string;
+  resumePublicId?: string;
   bio?: string;
   headline?: string;
   location?: string;
@@ -167,6 +167,7 @@ export interface IApplication extends Document {
   applicant: Types.ObjectId;
   coverLetter?: string;
   resumePath?: string;
+  resumePublicId?: string;
   status: ApplicationStatus;
   statusHistory: IStatusHistory[];
   employerNotes?: string;
@@ -211,13 +212,6 @@ export interface INotification extends Document {
   updatedAt: Date;
 }
 
-// Authenticated Request - carries role info from JWT
-export interface AuthRequest extends Request {
-  user?: IBaseUser | IAdmin;
-  userRole?: UserRole;
-  userId?: string;
-}
-
 // Token payload stored in JWT
 export interface TokenPayload {
   userId: string;
@@ -225,6 +219,16 @@ export interface TokenPayload {
 }
 
 // Pagination
+export type SubscriptionFeature =
+  | 'jobPost'
+  | 'application'
+  | 'premiumPlacement'
+  | 'resumeAccess'
+  | 'analyticsAccess'
+  | 'messaging'
+  | 'profileViewers'
+  | 'savedJobs';
+
 export interface PaginationOptions {
   page: number;
   limit: number;

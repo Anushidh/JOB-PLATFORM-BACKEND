@@ -1,6 +1,5 @@
 import { Router } from 'express';
-import companyFollowController from '../controllers/companyFollow.controller';
-import { authenticate } from '../middleware/auth';
+import { companyFollowController, authenticate } from '../container';
 import { roleGuard } from '../middleware/roleGuard';
 import { UserRole } from '../types';
 
@@ -10,9 +9,9 @@ const router = Router();
 router.get('/:companyId/followers/count', companyFollowController.getFollowerCount);
 
 // Employee-only
-router.post('/:companyId/follow', authenticate, roleGuard(UserRole.EMPLOYEE), companyFollowController.followCompany as any);
-router.delete('/:companyId/follow', authenticate, roleGuard(UserRole.EMPLOYEE), companyFollowController.unfollowCompany as any);
-router.get('/:companyId/check', authenticate, roleGuard(UserRole.EMPLOYEE), companyFollowController.checkFollowing as any);
-router.get('/my/following', authenticate, roleGuard(UserRole.EMPLOYEE), companyFollowController.getFollowedCompanies as any);
+router.post('/:companyId/follow', authenticate, roleGuard(UserRole.EMPLOYEE), companyFollowController.followCompany);
+router.delete('/:companyId/follow', authenticate, roleGuard(UserRole.EMPLOYEE), companyFollowController.unfollowCompany);
+router.get('/:companyId/check', authenticate, roleGuard(UserRole.EMPLOYEE), companyFollowController.checkFollowing);
+router.get('/my/following', authenticate, roleGuard(UserRole.EMPLOYEE), companyFollowController.getFollowedCompanies);
 
 export default router;

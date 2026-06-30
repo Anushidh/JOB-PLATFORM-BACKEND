@@ -23,11 +23,12 @@ const ApplicationSchema = new Schema<IApplication>(
     },
     applicant: {
       type: Schema.Types.ObjectId,
-      ref: 'User',
+      ref: 'Employee',
       required: true,
     },
     coverLetter: { type: String },
     resumePath: { type: String },
+    resumePublicId: { type: String },
     status: {
       type: String,
       enum: Object.values(ApplicationStatus),

@@ -1,26 +1,30 @@
-import { Response, NextFunction } from 'express';
-import uploadService from '../services/upload.service';
+import { Request, Response, NextFunction } from 'express';
+import { UploadService } from '../services/upload.service';
+import { UserRepository } from '../repositories/user.repository';
+import { CompanyRepository } from '../repositories/company.repository';
 import { ApiResponse } from '../utils/apiResponse';
 import { ApiError } from '../utils/apiError';
-import { AuthRequest, UserRole } from '../types';
-import Employee from '../models/Employee';
-import Employer from '../models/Employer';
-import Company from '../models/Company';
+import { UserRole } from '../types';
 
-class UploadController {
-  async uploadAvatar(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+export class UploadController {
+  constructor(
+    private readonly uploadService: UploadService,
+    private readonly userRepository: UserRepository,
+    private readonly companyRepository: CompanyRepository,
+  ) {}
+
+  async uploadAvatar(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       if (!req.file) {
         throw ApiError.badRequest('No file uploaded');
       }
 
-      const result = await uploadService.uploadAvatar(req.file);
+      const result = await this.uploadService.uploadAvatar(req.file);
 
-      // Update user avatar in DB
       if (req.userRole === UserRole.EMPLOYEE) {
-        await Employee.findByIdAndUpdate(req.userId, { avatar: result.url });
+        await this.userRepository.updateEmployee(req.userId!, { avatar: result.url });
       } else if (req.userRole === UserRole.EMPLOYER) {
-        await Employer.findByIdAndUpdate(req.userId, { avatar: result.url });
+        await this.userRepository.updateEmployer(req.userId!, { avatar: result.url });
       }
 
       ApiResponse.success(res, {
@@ -32,22 +36,20 @@ class UploadController {
     }
   }
 
-  async uploadCompanyLogo(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  async uploadCompanyLogo(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       if (!req.file) {
         throw ApiError.badRequest('No file uploaded');
       }
 
-      // Verify employer has a company
-      const company = await Company.findOne({ owner: req.userId });
+      const company = await this.companyRepository.findByOwner(req.userId!);
       if (!company) {
         throw ApiError.badRequest('You must create a company first');
       }
 
-      const result = await uploadService.uploadLogo(req.file);
+      const result = await this.uploadService.uploadLogo(req.file);
 
-      // Update company logo
-      await Company.findByIdAndUpdate(company._id, { logoUrl: result.url });
+      await this.companyRepository.update(company._id.toString(), { logoUrl: result.url });
 
       ApiResponse.success(res, {
         url: result.url,
@@ -58,16 +60,15 @@ class UploadController {
     }
   }
 
-  async uploadResume(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  async uploadResume(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       if (!req.file) {
         throw ApiError.badRequest('No file uploaded');
       }
 
-      const result = await uploadService.uploadResume(req.file);
+      const result = await this.uploadService.uploadResume(req.file);
 
-      // Update employee resume path
-      await Employee.findByIdAndUpdate(req.userId, { resumePath: result.url });
+      await this.userRepository.updateEmployeeResume(req.userId!, result.url, result.publicId);
 
       ApiResponse.success(res, {
         url: result.url,
@@ -78,19 +79,44 @@ class UploadController {
     }
   }
 
-  async deleteFile(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  async deleteFile(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { publicId, resourceType } = req.body;
       if (!publicId) {
         throw ApiError.badRequest('Public ID is required');
       }
 
-      await uploadService.deleteFile(publicId, resourceType || 'image');
+      await this.uploadService.deleteFile(publicId, resourceType || 'image');
       ApiResponse.success(res, null, 'File deleted successfully');
     } catch (error) {
       next(error);
     }
   }
-}
 
-export default new UploadController();
+  async getResumeDownloadUrl(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const employee = await this.userRepository.findEmployeeByIdSelect(
+        req.userId!,
+        'resumePath resumePublicId',
+      );
+
+      if (!employee) {
+        throw ApiError.notFound('Employee not found');
+      }
+
+      const publicId = this.uploadService.resolveResumePublicId(
+        employee.resumePublicId,
+        employee.resumePath,
+      );
+
+      if (!publicId) {
+        throw ApiError.notFound('No resume uploaded');
+      }
+
+      const signedUrl = this.uploadService.getSignedDownloadUrl(publicId, 'raw');
+      ApiResponse.success(res, signedUrl, 'Signed resume URL generated');
+    } catch (error) {
+      next(error);
+    }
+  }
+}

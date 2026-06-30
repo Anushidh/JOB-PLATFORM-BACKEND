@@ -1,15 +1,16 @@
-import { Response, NextFunction } from 'express';
-import messageService from '../services/message.service';
+import { Request, Response, NextFunction } from 'express';
+import { MessageService } from '../services/message.service';
 import { ApiResponse } from '../utils/apiResponse';
-import { AuthRequest, UserRole } from '../types';
+import { UserRole } from '../types';
 import { DEFAULT_PAGE, DEFAULT_LIMIT } from '../utils/constants';
 
-class MessageController {
-  async sendMessage(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+export class MessageController {
+  constructor(private readonly messageService: MessageService) {}
+  async sendMessage(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { recipientId, recipientRole, content } = req.body;
 
-      const message = await messageService.sendMessage({
+      const message = await this.messageService.sendMessage({
         senderId: req.userId!,
         senderRole: req.userRole!,
         recipientId,
@@ -23,24 +24,24 @@ class MessageController {
     }
   }
 
-  async getConversations(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  async getConversations(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const page = parseInt(req.query.page as string) || DEFAULT_PAGE;
       const limit = parseInt(req.query.limit as string) || DEFAULT_LIMIT;
 
-      const result = await messageService.getConversations(req.userId!, { page, limit });
+      const result = await this.messageService.getConversations(req.userId!, { page, limit });
       ApiResponse.paginated(res, result.data, result.pagination.total, page, limit);
     } catch (error) {
       next(error);
     }
   }
 
-  async getMessages(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  async getMessages(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const page = parseInt(req.query.page as string) || DEFAULT_PAGE;
       const limit = parseInt(req.query.limit as string) || DEFAULT_LIMIT;
 
-      const result = await messageService.getMessages(
+      const result = await this.messageService.getMessages(
         req.params.conversationId,
         req.userId!,
         { page, limit }
@@ -51,18 +52,18 @@ class MessageController {
     }
   }
 
-  async getUnreadCount(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  async getUnreadCount(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const count = await messageService.getUnreadCount(req.userId!);
+      const count = await this.messageService.getUnreadCount(req.userId!);
       ApiResponse.success(res, { count }, 'Unread count retrieved');
     } catch (error) {
       next(error);
     }
   }
 
-  async deleteConversation(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  async deleteConversation(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      await messageService.deleteConversation(req.params.conversationId, req.userId!);
+      await this.messageService.deleteConversation(req.params.conversationId, req.userId!);
       ApiResponse.success(res, null, 'Conversation deleted');
     } catch (error) {
       next(error);
@@ -70,4 +71,3 @@ class MessageController {
   }
 }
 
-export default new MessageController();

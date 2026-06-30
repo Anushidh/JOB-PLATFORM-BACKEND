@@ -1,16 +1,16 @@
-import Employee from '../models/Employee';
-import Employer from '../models/Employer';
 import { ApiError } from '../utils/apiError';
-import { IEmployee, IEmployer, IBaseUser, UserRole, PaginationOptions, PaginatedResult } from '../types';
+import { UserRepository } from '../repositories/user.repository';
+import { IEmployee, IEmployer, UserRole, PaginationOptions, PaginatedResult } from '../types';
 
-class UserService {
-  /** Fetches the authenticated user's profile based on their role */
+export class UserService {
+  constructor(private readonly userRepository: UserRepository) {}
+
   async getProfile(userId: string, role: UserRole): Promise<IEmployee | IEmployer> {
     let user;
     if (role === UserRole.EMPLOYEE) {
-      user = await Employee.findById(userId);
+      user = await this.userRepository.findEmployeeById(userId);
     } else if (role === UserRole.EMPLOYER) {
-      user = await Employer.findById(userId).populate('company');
+      user = await this.userRepository.findEmployerById(userId);
     }
 
     if (!user) {
@@ -19,19 +19,13 @@ class UserService {
     return user;
   }
 
-  /** Updates employee profile fields, blocking changes to sensitive fields like password and email */
   async updateEmployeeProfile(userId: string, updateData: Partial<IEmployee>): Promise<IEmployee> {
-    // Prevent updating sensitive fields
     const forbiddenFields = ['password', 'email', 'isActive', 'isSuspended'];
     forbiddenFields.forEach((field) => {
-      delete (updateData as any)[field];
+      delete (updateData as Record<string, unknown>)[field];
     });
 
-    const employee = await Employee.findByIdAndUpdate(
-      userId,
-      { $set: updateData },
-      { new: true, runValidators: true }
-    );
+    const employee = await this.userRepository.updateEmployee(userId, updateData);
 
     if (!employee) {
       throw ApiError.notFound('Employee not found');
@@ -40,19 +34,13 @@ class UserService {
     return employee;
   }
 
-  /** Updates employer profile fields, blocking changes to sensitive fields like password and email */
   async updateEmployerProfile(userId: string, updateData: Partial<IEmployer>): Promise<IEmployer> {
-    // Prevent updating sensitive fields
     const forbiddenFields = ['password', 'email', 'isActive', 'isSuspended'];
     forbiddenFields.forEach((field) => {
-      delete (updateData as any)[field];
+      delete (updateData as Record<string, unknown>)[field];
     });
 
-    const employer = await Employer.findByIdAndUpdate(
-      userId,
-      { $set: updateData },
-      { new: true, runValidators: true }
-    ).populate('company');
+    const employer = await this.userRepository.updateEmployer(userId, updateData);
 
     if (!employer) {
       throw ApiError.notFound('Employer not found');
@@ -61,26 +49,20 @@ class UserService {
     return employer;
   }
 
-  /** Updates the employee's resume file path */
   async updateResume(userId: string, resumePath: string): Promise<IEmployee> {
-    const employee = await Employee.findByIdAndUpdate(
-      userId,
-      { resumePath },
-      { new: true }
-    );
+    const employee = await this.userRepository.updateEmployeeResume(userId, resumePath);
     if (!employee) {
       throw ApiError.notFound('Employee not found');
     }
     return employee;
   }
 
-  /** Verifies current password and updates to new password */
   async changePassword(userId: string, role: UserRole, currentPassword: string, newPassword: string): Promise<void> {
     let user;
     if (role === UserRole.EMPLOYEE) {
-      user = await Employee.findById(userId).select('+password');
+      user = await this.userRepository.findEmployeeByIdWithPassword(userId);
     } else {
-      user = await Employer.findById(userId).select('+password');
+      user = await this.userRepository.findEmployerByIdWithPassword(userId);
     }
 
     if (!user) {
@@ -96,10 +78,8 @@ class UserService {
     await user.save();
   }
 
-  /** Returns public-facing employee profile (excludes private fields like email) */
   async getPublicEmployeeProfile(userId: string): Promise<Partial<IEmployee>> {
-    const employee = await Employee.findById(userId)
-      .select('firstName lastName avatar bio headline skills experience education portfolioLinks location');
+    const employee = await this.userRepository.findPublicEmployee(userId);
 
     if (!employee) {
       throw ApiError.notFound('Employee not found');
@@ -108,11 +88,8 @@ class UserService {
     return employee;
   }
 
-  /** Returns public-facing employer profile with company info */
   async getPublicEmployerProfile(userId: string): Promise<Partial<IEmployer>> {
-    const employer = await Employer.findById(userId)
-      .select('firstName lastName avatar position department')
-      .populate('company', 'name logoUrl industry description website');
+    const employer = await this.userRepository.findPublicEmployer(userId);
 
     if (!employer) {
       throw ApiError.notFound('Employer not found');
@@ -121,47 +98,13 @@ class UserService {
     return employer;
   }
 
-  /** Searches employees by name, skills, or headline with pagination */
   async searchEmployees(
     query: string,
-    options: PaginationOptions
+    options: PaginationOptions,
   ): Promise<PaginatedResult<IEmployee>> {
-    const { page, limit, sort = 'createdAt', order = 'desc' } = options;
-    const skip = (page - 1) * limit;
-
-    const filter: any = {};
-    if (query) {
-      filter.$or = [
-        { firstName: { $regex: query, $options: 'i' } },
-        { lastName: { $regex: query, $options: 'i' } },
-        { skills: { $regex: query, $options: 'i' } },
-        { headline: { $regex: query, $options: 'i' } },
-      ];
-    }
-
-    const [employees, total] = await Promise.all([
-      Employee.find(filter)
-        .select('-password')
-        .sort({ [sort]: order === 'asc' ? 1 : -1 })
-        .skip(skip)
-        .limit(limit),
-      Employee.countDocuments(filter),
-    ]);
-
-    return {
-      data: employees,
-      pagination: {
-        total,
-        page,
-        limit,
-        pages: Math.ceil(total / limit),
-        hasNext: page < Math.ceil(total / limit),
-        hasPrev: page > 1,
-      },
-    };
+    return this.userRepository.searchEmployees(query, options);
   }
 
-  /** Calculates profile completion percentage based on filled fields */
   calculateProfileCompletion(user: IEmployee | IEmployer, role: UserRole): { percentage: number; missingFields: string[] } {
     const missingFields: string[] = [];
 
@@ -183,21 +126,19 @@ class UserService {
       fields.forEach(f => { if (!f.filled) missingFields.push(f.name); });
       const filled = fields.filter(f => f.filled).length;
       return { percentage: Math.round((filled / fields.length) * 100), missingFields };
-    } else {
-      const emp = user as IEmployer;
-      const fields = [
-        { name: 'Avatar', filled: !!emp.avatar },
-        { name: 'Phone', filled: !!emp.phone },
-        { name: 'Position', filled: !!emp.position },
-        { name: 'Department', filled: !!emp.department },
-        { name: 'Company', filled: !!emp.company },
-      ];
-
-      fields.forEach(f => { if (!f.filled) missingFields.push(f.name); });
-      const filled = fields.filter(f => f.filled).length;
-      return { percentage: Math.round((filled / fields.length) * 100), missingFields };
     }
+
+    const emp = user as IEmployer;
+    const fields = [
+      { name: 'Avatar', filled: !!emp.avatar },
+      { name: 'Phone', filled: !!emp.phone },
+      { name: 'Position', filled: !!emp.position },
+      { name: 'Department', filled: !!emp.department },
+      { name: 'Company', filled: !!emp.company },
+    ];
+
+    fields.forEach(f => { if (!f.filled) missingFields.push(f.name); });
+    const filled = fields.filter(f => f.filled).length;
+    return { percentage: Math.round((filled / fields.length) * 100), missingFields };
   }
 }
-
-export default new UserService();

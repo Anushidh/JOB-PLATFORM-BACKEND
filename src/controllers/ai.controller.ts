@@ -1,20 +1,25 @@
 import { Request, Response, NextFunction } from 'express';
-import aiService from '../services/ai.service';
-import Employee from '../models/Employee';
-import Job from '../models/Job';
+import { AIService } from '../services/ai.service';
+import { UserRepository } from '../repositories/user.repository';
+import { JobRepository } from '../repositories/job.repository';
 import { ApiResponse } from '../utils/apiResponse';
 import { ApiError } from '../utils/apiError';
-import { AuthRequest, IEmployee, IJob, UserRole } from '../types';
+import { IEmployee, IJob } from '../types';
 
-class AIController {
-  /** Parses an uploaded resume PDF and returns structured profile data */
-  async parseResume(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+export class AIController {
+  constructor(
+    private readonly aiService: AIService,
+    private readonly userRepository: UserRepository,
+    private readonly jobRepository: JobRepository,
+  ) {}
+
+  async parseResume(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       if (!req.file) {
         throw ApiError.badRequest('No PDF file uploaded');
       }
 
-      const parsed = await aiService.parseResume(req.file.buffer);
+      const parsed = await this.aiService.parseResume(req.file.buffer);
 
       ApiResponse.success(res, { parsed }, 'Resume parsed successfully. Review the data before saving.');
     } catch (error) {
@@ -22,23 +27,18 @@ class AIController {
     }
   }
 
-  /** Applies parsed resume data to the employee's profile */
-  async applyParsedResume(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  async applyParsedResume(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { skills, experience, education, bio, headline } = req.body;
 
-      const updateData: any = {};
+      const updateData: Record<string, unknown> = {};
       if (skills && skills.length > 0) updateData.skills = skills;
       if (experience && experience.length > 0) updateData.experience = experience;
       if (education && education.length > 0) updateData.education = education;
       if (bio) updateData.bio = bio;
       if (headline) updateData.headline = headline;
 
-      const employee = await Employee.findByIdAndUpdate(
-        req.userId,
-        { $set: updateData },
-        { new: true }
-      );
+      const employee = await this.userRepository.updateEmployee(req.userId!, updateData);
 
       if (!employee) {
         throw ApiError.notFound('Employee not found');
@@ -50,12 +50,11 @@ class AIController {
     }
   }
 
-  /** Generates a professional job description from basic job details */
-  async generateJobDescription(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  async generateJobDescription(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { title, skills, experienceLevel, jobType, workMode, location, salaryMin, salaryMax, companyDescription } = req.body;
 
-      const description = await aiService.generateJobDescription({
+      const description = await this.aiService.generateJobDescription({
         title,
         skills,
         experienceLevel,
@@ -73,8 +72,7 @@ class AIController {
     }
   }
 
-  /** Generates a personalized cover letter for an employee applying to a specific job */
-  async generateCoverLetter(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  async generateCoverLetter(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { jobId } = req.body;
 
@@ -82,7 +80,7 @@ class AIController {
         throw ApiError.badRequest('Job ID is required');
       }
 
-      const coverLetter = await aiService.generateCoverLetter(req.userId!, jobId);
+      const coverLetter = await this.aiService.generateCoverLetter(req.userId!, jobId);
 
       ApiResponse.success(res, { coverLetter }, 'Cover letter generated');
     } catch (error) {
@@ -90,14 +88,13 @@ class AIController {
     }
   }
 
-  /** Returns a match score between the authenticated employee and a specific job */
-  async getMatchScore(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  async getMatchScore(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { jobId } = req.params;
 
       const [employee, job] = await Promise.all([
-        Employee.findById(req.userId),
-        Job.findById(jobId),
+        this.userRepository.findEmployeeById(req.userId!),
+        this.jobRepository.findById(jobId),
       ]);
 
       if (!employee) {
@@ -108,8 +105,8 @@ class AIController {
         throw ApiError.notFound('Job not found');
       }
 
-      const matchScore = aiService.calculateMatchScore(employee as IEmployee, job as IJob);
-      const explanation = aiService.generateMatchExplanation(employee as IEmployee, job as IJob, matchScore);
+      const matchScore = this.aiService.calculateMatchScore(employee as IEmployee, job as IJob);
+      const explanation = this.aiService.generateMatchExplanation(employee as IEmployee, job as IJob, matchScore);
 
       ApiResponse.success(res, { ...matchScore, explanation }, 'Match score calculated');
     } catch (error) {
@@ -117,12 +114,11 @@ class AIController {
     }
   }
 
-  /** Returns match scores for an employer viewing applicants for their job */
-  async getApplicantMatchScore(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  async getApplicantMatchScore(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { jobId, applicantId } = req.params;
 
-      const job = await Job.findById(jobId);
+      const job = await this.jobRepository.findById(jobId);
       if (!job) {
         throw ApiError.notFound('Job not found');
       }
@@ -131,12 +127,12 @@ class AIController {
         throw ApiError.forbidden('You can only view match scores for your own jobs');
       }
 
-      const employee = await Employee.findById(applicantId);
+      const employee = await this.userRepository.findEmployeeById(applicantId);
       if (!employee) {
         throw ApiError.notFound('Applicant not found');
       }
 
-      const matchScore = aiService.calculateMatchScore(employee as IEmployee, job as IJob);
+      const matchScore = this.aiService.calculateMatchScore(employee as IEmployee, job as IJob);
 
       ApiResponse.success(res, matchScore, 'Applicant match score calculated');
     } catch (error) {
@@ -144,5 +140,3 @@ class AIController {
     }
   }
 }
-
-export default new AIController();

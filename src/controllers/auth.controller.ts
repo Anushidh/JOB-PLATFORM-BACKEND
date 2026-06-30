@@ -1,14 +1,15 @@
 import { Request, Response, NextFunction } from 'express';
-import authService from '../services/auth.service';
+import { AuthService } from '../services/auth.service';
 import { ApiResponse } from '../utils/apiResponse';
-import { AuthRequest, UserRole } from '../types';
+import { UserRole } from '../types';
 
-class AuthController {
+export class AuthController {
+  constructor(private readonly authService: AuthService) {}
   // Step 1: Receive registration data, store in Redis, send OTP
   async initiateEmployeeRegistration(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { email, password, firstName, lastName, phone, skills, bio, headline, location } = req.body;
-      const result = await authService.initiateEmployeeRegistration({
+      const result = await this.authService.initiateEmployeeRegistration({
         email, password, firstName, lastName, phone, skills, bio, headline, location,
       });
 
@@ -24,7 +25,7 @@ class AuthController {
   async initiateEmployerRegistration(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { email, password, firstName, lastName, phone, position, department } = req.body;
-      const result = await authService.initiateEmployerRegistration({
+      const result = await this.authService.initiateEmployerRegistration({
         email, password, firstName, lastName, phone, position, department,
       });
 
@@ -41,7 +42,7 @@ class AuthController {
   async verifyEmployeeRegistration(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { email, otp } = req.body;
-      const result = await authService.verifyAndRegisterEmployee(email, otp);
+      const result = await this.authService.verifyAndRegisterEmployee(email, otp);
 
       ApiResponse.created(res, {
         user: result.user,
@@ -56,7 +57,7 @@ class AuthController {
   async verifyEmployerRegistration(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { email, otp } = req.body;
-      const result = await authService.verifyAndRegisterEmployer(email, otp);
+      const result = await this.authService.verifyAndRegisterEmployer(email, otp);
 
       ApiResponse.created(res, {
         user: result.user,
@@ -71,7 +72,7 @@ class AuthController {
   async loginEmployee(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { email, password } = req.body;
-      const result = await authService.loginEmployee({ email, password });
+      const result = await this.authService.loginEmployee({ email, password });
 
       ApiResponse.success(res, {
         user: result.user,
@@ -86,7 +87,7 @@ class AuthController {
   async loginEmployer(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { email, password } = req.body;
-      const result = await authService.loginEmployer({ email, password });
+      const result = await this.authService.loginEmployer({ email, password });
 
       ApiResponse.success(res, {
         user: result.user,
@@ -101,7 +102,7 @@ class AuthController {
   async loginAdmin(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { email, password } = req.body;
-      const result = await authService.loginAdmin({ email, password });
+      const result = await this.authService.loginAdmin({ email, password });
 
       ApiResponse.success(res, {
         user: result.user,
@@ -116,7 +117,7 @@ class AuthController {
   async refreshToken(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { refreshToken } = req.body;
-      const tokens = await authService.refreshTokens(refreshToken);
+      const tokens = await this.authService.refreshTokens(refreshToken);
 
       ApiResponse.success(res, { tokens }, 'Token refreshed successfully');
     } catch (error) {
@@ -124,17 +125,17 @@ class AuthController {
     }
   }
 
-  async logout(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  async logout(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const token = req.headers.authorization!.split(' ')[1];
-      await authService.logout(req.userId!, req.userRole!, token);
+      await this.authService.logout(req.userId!, req.userRole!, token);
       ApiResponse.success(res, null, 'Logout successful');
     } catch (error) {
       next(error);
     }
   }
 
-  async me(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  async me(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       ApiResponse.success(res, {
         user: req.user,
@@ -149,7 +150,7 @@ class AuthController {
   async sendPasswordResetOtp(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { email, role } = req.body;
-      const result = await authService.sendPasswordResetOtp(email, role);
+      const result = await this.authService.sendPasswordResetOtp(email, role);
 
       ApiResponse.success(res, {
         email,
@@ -164,7 +165,7 @@ class AuthController {
   async resetPassword(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { email, role, otp, newPassword } = req.body;
-      await authService.resetPassword(email, role, otp, newPassword);
+      await this.authService.resetPassword(email, role, otp, newPassword);
 
       ApiResponse.success(res, null, 'Password reset successful. Please login with your new password.');
     } catch (error) {
@@ -173,4 +174,3 @@ class AuthController {
   }
 }
 
-export default new AuthController();

@@ -1,99 +1,44 @@
-import Employee from '../models/Employee';
-import Employer from '../models/Employer';
-import Job from '../models/Job';
-import Application from '../models/Application';
-import Company from '../models/Company';
 import { ApiError } from '../utils/apiError';
+import { AdminRepository } from '../repositories/admin.repository';
+import { JobRepository } from '../repositories/job.repository';
+import { ApplicationRepository } from '../repositories/application.repository';
+import { CompanyRepository } from '../repositories/company.repository';
+import { NotificationService } from './notification.service';
+import { TokenService } from './token.service';
+import { JobAlertService } from './jobAlert.service';
 import { IEmployee, IEmployer, IJob, JobStatus, UserRole, PaginationOptions, PaginatedResult, NotificationType } from '../types';
-import notificationService from './notification.service';
-import tokenService from './token.service';
-import jobAlertService from './jobAlert.service';
 
-class AdminService {
-  /** Returns a paginated list of all employees, optionally filtered by name/email search */
+export class AdminService {
+  constructor(
+    private readonly adminRepository: AdminRepository,
+    private readonly jobRepository: JobRepository,
+    private readonly applicationRepository: ApplicationRepository,
+    private readonly companyRepository: CompanyRepository,
+    private readonly notificationService: NotificationService,
+    private readonly tokenService: TokenService,
+    private readonly jobAlertService: JobAlertService,
+  ) {}
+
   async getAllEmployees(
     options: PaginationOptions,
-    search?: string
+    search?: string,
   ): Promise<PaginatedResult<IEmployee>> {
-    const { page, limit, sort = 'createdAt', order = 'desc' } = options;
-    const skip = (page - 1) * limit;
-
-    const query: any = {};
-    if (search) {
-      query.$or = [
-        { firstName: { $regex: search, $options: 'i' } },
-        { lastName: { $regex: search, $options: 'i' } },
-        { email: { $regex: search, $options: 'i' } },
-      ];
-    }
-
-    const [employees, total] = await Promise.all([
-      Employee.find(query)
-        .sort({ [sort]: order === 'asc' ? 1 : -1 })
-        .skip(skip)
-        .limit(limit),
-      Employee.countDocuments(query),
-    ]);
-
-    return {
-      data: employees,
-      pagination: {
-        total,
-        page,
-        limit,
-        pages: Math.ceil(total / limit),
-        hasNext: page < Math.ceil(total / limit),
-        hasPrev: page > 1,
-      },
-    };
+    return this.adminRepository.findAllEmployees(options, search);
   }
 
-  /** Returns a paginated list of all employers with company info, optionally filtered by search */
   async getAllEmployers(
     options: PaginationOptions,
-    search?: string
+    search?: string,
   ): Promise<PaginatedResult<IEmployer>> {
-    const { page, limit, sort = 'createdAt', order = 'desc' } = options;
-    const skip = (page - 1) * limit;
-
-    const query: any = {};
-    if (search) {
-      query.$or = [
-        { firstName: { $regex: search, $options: 'i' } },
-        { lastName: { $regex: search, $options: 'i' } },
-        { email: { $regex: search, $options: 'i' } },
-      ];
-    }
-
-    const [employers, total] = await Promise.all([
-      Employer.find(query)
-        .populate('company', 'name')
-        .sort({ [sort]: order === 'asc' ? 1 : -1 })
-        .skip(skip)
-        .limit(limit),
-      Employer.countDocuments(query),
-    ]);
-
-    return {
-      data: employers,
-      pagination: {
-        total,
-        page,
-        limit,
-        pages: Math.ceil(total / limit),
-        hasNext: page < Math.ceil(total / limit),
-        hasPrev: page > 1,
-      },
-    };
+    return this.adminRepository.findAllEmployers(options, search);
   }
 
-  /** Suspends a user account, revokes all tokens, and sends a suspension notification */
   async suspendUser(userId: string, role: UserRole): Promise<IEmployee | IEmployer> {
     let user;
     if (role === UserRole.EMPLOYEE) {
-      user = await Employee.findById(userId);
+      user = await this.adminRepository.findEmployeeById(userId);
     } else {
-      user = await Employer.findById(userId);
+      user = await this.adminRepository.findEmployerById(userId);
     }
 
     if (!user) {
@@ -103,10 +48,9 @@ class AdminService {
     user.isSuspended = true;
     await user.save();
 
-    // Revoke all tokens
-    await tokenService.revokeAllUserTokens(userId, role);
+    await this.tokenService.revokeAllUserTokens(userId, role);
 
-    await notificationService.createNotification({
+    await this.notificationService.createNotification({
       recipient: userId,
       recipientRole: role,
       type: NotificationType.ACCOUNT_SUSPENDED,
@@ -117,13 +61,12 @@ class AdminService {
     return user;
   }
 
-  /** Removes suspension from a user and sends a reactivation notification */
   async reactivateUser(userId: string, role: UserRole): Promise<IEmployee | IEmployer> {
     let user;
     if (role === UserRole.EMPLOYEE) {
-      user = await Employee.findById(userId);
+      user = await this.adminRepository.findEmployeeById(userId);
     } else {
-      user = await Employer.findById(userId);
+      user = await this.adminRepository.findEmployerById(userId);
     }
 
     if (!user) {
@@ -133,7 +76,7 @@ class AdminService {
     user.isSuspended = false;
     await user.save();
 
-    await notificationService.createNotification({
+    await this.notificationService.createNotification({
       recipient: userId,
       recipientRole: role,
       type: NotificationType.ACCOUNT_REACTIVATED,
@@ -144,29 +87,26 @@ class AdminService {
     return user;
   }
 
-  /** Soft-deletes a user. Blocks deletion if employer has active/pending jobs with applications. */
   async deleteUser(userId: string, role: UserRole): Promise<void> {
     if (role === UserRole.EMPLOYEE) {
-      const employee = await Employee.findById(userId);
+      const employee = await this.adminRepository.findEmployeeById(userId);
       if (!employee) throw ApiError.notFound('User not found');
       employee.isDeleted = true;
       employee.deletedAt = new Date();
       employee.isActive = false;
       await employee.save();
     } else if (role === UserRole.EMPLOYER) {
-      const employer = await Employer.findById(userId);
+      const employer = await this.adminRepository.findEmployerById(userId);
       if (!employer) throw ApiError.notFound('User not found');
 
-      // Block deletion if employer has active/pending jobs
-      const activeJobCount = await Job.countDocuments({
-        employer: userId,
-        isDeleted: false,
-        status: { $in: [JobStatus.ACTIVE, JobStatus.PENDING] },
-      });
+      const activeJobCount = await this.jobRepository.countByEmployerAndStatus(
+        userId,
+        [JobStatus.ACTIVE, JobStatus.PENDING],
+      );
 
       if (activeJobCount > 0) {
         throw ApiError.badRequest(
-          `Cannot delete account. You have ${activeJobCount} active/pending job(s). Close or delete them first.`
+          `Cannot delete account. You have ${activeJobCount} active/pending job(s). Close or delete them first.`,
         );
       }
 
@@ -174,50 +114,18 @@ class AdminService {
       employer.deletedAt = new Date();
       employer.isActive = false;
       await employer.save();
-      // Soft delete employer's remaining jobs (drafts, closed)
-      await Job.updateMany(
-        { employer: userId, isDeleted: false },
-        { isDeleted: true, deletedAt: new Date(), status: JobStatus.CLOSED }
-      );
+      await this.jobRepository.softDeleteByEmployer(userId);
     }
 
-    // Revoke all tokens
-    await tokenService.revokeAllUserTokens(userId, role);
+    await this.tokenService.revokeAllUserTokens(userId, role);
   }
 
-  /** Returns paginated list of jobs pending admin review */
   async getPendingJobs(options: PaginationOptions): Promise<PaginatedResult<IJob>> {
-    const { page, limit, sort = 'createdAt', order = 'desc' } = options;
-    const skip = (page - 1) * limit;
-
-    const query = { status: JobStatus.PENDING };
-
-    const [jobs, total] = await Promise.all([
-      Job.find(query)
-        .populate('company', 'name logoUrl')
-        .populate('employer', 'firstName lastName email')
-        .sort({ [sort]: order === 'asc' ? 1 : -1 })
-        .skip(skip)
-        .limit(limit),
-      Job.countDocuments(query),
-    ]);
-
-    return {
-      data: jobs,
-      pagination: {
-        total,
-        page,
-        limit,
-        pages: Math.ceil(total / limit),
-        hasNext: page < Math.ceil(total / limit),
-        hasPrev: page > 1,
-      },
-    };
+    return this.jobRepository.findPending(options);
   }
 
-  /** Approves a pending job, notifies the employer, and triggers instant job alerts */
   async approveJob(jobId: string): Promise<IJob> {
-    const job = await Job.findById(jobId);
+    const job = await this.jobRepository.findById(jobId);
     if (!job) {
       throw ApiError.notFound('Job not found');
     }
@@ -229,24 +137,22 @@ class AdminService {
     job.status = JobStatus.ACTIVE;
     await job.save();
 
-    await notificationService.notifyJobModeration(
+    await this.notificationService.notifyJobModeration(
       job.employer.toString(),
       job._id.toString(),
       true,
-      job.title
+      job.title,
     );
 
-    // Trigger instant job alerts for matching employees
-    jobAlertService.checkInstantAlerts(job._id.toString()).catch((err) =>
-      console.error('[JobAlert] Error checking instant alerts:', err)
+    this.jobAlertService.checkInstantAlerts(job._id.toString()).catch((err) =>
+      console.error('[JobAlert] Error checking instant alerts:', err),
     );
 
     return job.populate(['company', 'employer']);
   }
 
-  /** Rejects a pending job and notifies the employer */
   async rejectJob(jobId: string, _reason?: string): Promise<IJob> {
-    const job = await Job.findById(jobId);
+    const job = await this.jobRepository.findById(jobId);
     if (!job) {
       throw ApiError.notFound('Job not found');
     }
@@ -258,17 +164,16 @@ class AdminService {
     job.status = JobStatus.REJECTED;
     await job.save();
 
-    await notificationService.notifyJobModeration(
+    await this.notificationService.notifyJobModeration(
       job.employer.toString(),
       job._id.toString(),
       false,
-      job.title
+      job.title,
     );
 
     return job.populate(['company', 'employer']);
   }
 
-  /** Returns aggregate platform statistics (users, jobs, applications, companies) */
   async getPlatformStats(): Promise<{
     totalEmployees: number;
     totalEmployers: number;
@@ -287,13 +192,13 @@ class AdminService {
       totalApplications,
       totalCompanies,
     ] = await Promise.all([
-      Employee.countDocuments(),
-      Employer.countDocuments(),
-      Job.countDocuments(),
-      Job.countDocuments({ status: JobStatus.ACTIVE }),
-      Job.countDocuments({ status: JobStatus.PENDING }),
-      Application.countDocuments(),
-      Company.countDocuments(),
+      this.adminRepository.countEmployees(),
+      this.adminRepository.countEmployers(),
+      this.jobRepository.countDocuments(),
+      this.jobRepository.countDocuments({ status: JobStatus.ACTIVE }),
+      this.jobRepository.countDocuments({ status: JobStatus.PENDING }),
+      this.applicationRepository.countDocuments(),
+      this.companyRepository.countDocuments(),
     ]);
 
     return {
@@ -307,5 +212,3 @@ class AdminService {
     };
   }
 }
-
-export default new AdminService();

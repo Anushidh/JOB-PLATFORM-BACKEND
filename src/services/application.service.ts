@@ -1,21 +1,58 @@
-import Application from '../models/Application';
-import Job from '../models/Job';
+import mongoose from 'mongoose';
 import { ApiError } from '../utils/apiError';
-import { IApplication, ApplicationStatus, JobStatus, UserRole, NotificationType, PaginationOptions, PaginatedResult } from '../types';
-import notificationService from './notification.service';
-import analyticsService from './analytics.service';
+import { ApplicationRepository } from '../repositories/application.repository';
+import { JobRepository } from '../repositories/job.repository';
+import { UserRepository } from '../repositories/user.repository';
+import { NotificationService } from './notification.service';
+import { AnalyticsService } from './analytics.service';
+import { UploadService } from './upload.service';
+import {
+  IApplication,
+  ApplicationStatus,
+  JobStatus,
+  UserRole,
+  NotificationType,
+  PaginationOptions,
+  PaginatedResult,
+} from '../types';
 
 interface ApplyData {
   jobId: string;
   applicantId: string;
   coverLetter?: string;
   resumePath?: string;
+  resumePublicId?: string;
 }
 
-class ApplicationService {
-  /** Submits an application to a job, increments job applicationsCount, tracks analytics, and notifies the employer */
+interface ApplicationListItem {
+  hasResume: boolean;
+  [key: string]: unknown;
+}
+
+export class ApplicationService {
+  constructor(
+    private readonly applicationRepository: ApplicationRepository,
+    private readonly jobRepository: JobRepository,
+    private readonly userRepository: UserRepository,
+    private readonly notificationService: NotificationService,
+    private readonly analyticsService: AnalyticsService,
+    private readonly uploadService: UploadService,
+  ) {}
+
+  private sanitizeApplicationForEmployer(application: IApplication): ApplicationListItem {
+    const obj = typeof application.toObject === 'function'
+      ? application.toObject()
+      : { ...(application as unknown as Record<string, unknown>) };
+
+    const hasResume = !!(obj.resumePublicId || obj.resumePath);
+    delete obj.resumePath;
+    delete obj.resumePublicId;
+
+    return { ...obj, hasResume } as ApplicationListItem;
+  }
+
   async applyToJob(data: ApplyData): Promise<IApplication> {
-    const job = await Job.findById(data.jobId);
+    const job = await this.jobRepository.findById(data.jobId);
     if (!job) {
       throw ApiError.notFound('Job not found');
     }
@@ -28,64 +65,110 @@ class ApplicationService {
       throw ApiError.badRequest('Application deadline has passed');
     }
 
-    // Check if already applied
-    const existingApplication = await Application.findOne({
-      job: data.jobId,
-      applicant: data.applicantId,
-    });
+    const existingApplication = await this.applicationRepository.findExisting(data.jobId, data.applicantId);
 
     if (existingApplication) {
       throw ApiError.conflict('You have already applied to this job');
     }
 
-    const application = await Application.create({
-      job: data.jobId,
-      applicant: data.applicantId,
-      coverLetter: data.coverLetter,
-      resumePath: data.resumePath,
-      status: ApplicationStatus.APPLIED,
-      statusHistory: [
-        {
-          status: ApplicationStatus.APPLIED,
-          changedAt: new Date(),
-        },
-      ],
-    });
-
-    // Increment applications count on job
-    await Job.findByIdAndUpdate(data.jobId, {
-      $inc: { applicationsCount: 1 },
-    });
-
-    // Track application in analytics
-    await analyticsService.trackApplication(data.jobId);
-
-    // Notify employer
-    await notificationService.notifyNewApplication(
-      job.employer.toString(),
-      application._id.toString(),
-      job.title
+    const employee = await this.userRepository.findEmployeeByIdSelect(
+      data.applicantId,
+      'resumePath resumePublicId',
     );
 
-    return application.populate([
-      { path: 'job', select: 'title company location' },
-      { path: 'applicant', select: 'firstName lastName email', model: 'Employee' },
-    ]);
+    const resumePath = data.resumePath || employee?.resumePath;
+    const resumePublicId = data.resumePublicId
+      || employee?.resumePublicId
+      || this.uploadService.resolveResumePublicId(undefined, resumePath);
+
+    const session = await mongoose.startSession();
+
+    try {
+      let application: IApplication;
+
+      await session.withTransaction(async () => {
+        application = await this.applicationRepository.create(
+          {
+            job: data.jobId,
+            applicant: data.applicantId,
+            coverLetter: data.coverLetter,
+            resumePath,
+            resumePublicId,
+            status: ApplicationStatus.APPLIED,
+            statusHistory: [
+              {
+                status: ApplicationStatus.APPLIED,
+                changedAt: new Date(),
+              },
+            ],
+          },
+          session,
+        );
+
+        await this.jobRepository.incrementApplicationsCount(data.jobId, session);
+        await this.analyticsService.trackApplication(data.jobId, session);
+      });
+
+      await this.notificationService.notifyNewApplication(
+        job.employer.toString(),
+        application!._id.toString(),
+        job.title,
+      );
+
+      return application!.populate([
+        { path: 'job', select: 'title company location' },
+        { path: 'applicant', select: 'firstName lastName email' },
+      ]);
+    } catch (error) {
+      if ((error as { code?: number }).code === 11000) {
+        throw ApiError.conflict('You have already applied to this job');
+      }
+      throw error;
+    } finally {
+      await session.endSession();
+    }
   }
 
-  /** Fetches a single application with populated job and applicant details */
+  async getApplicationResumeDownloadUrl(
+    applicationId: string,
+    requesterId: string,
+    requesterRole: UserRole,
+  ): Promise<{ url: string; expiresAt: number }> {
+    const application = await this.applicationRepository.findById(applicationId);
+    if (!application) {
+      throw ApiError.notFound('Application not found');
+    }
+
+    if (requesterRole === UserRole.EMPLOYEE) {
+      if (application.applicant.toString() !== requesterId) {
+        throw ApiError.forbidden('You can only download your own application resume');
+      }
+    } else if (requesterRole === UserRole.EMPLOYER) {
+      const job = await this.jobRepository.findById(application.job.toString());
+      if (!job) {
+        throw ApiError.notFound('Associated job not found');
+      }
+      if (job.employer.toString() !== requesterId) {
+        throw ApiError.forbidden('You can only download resumes for your own job applications');
+      }
+    } else {
+      throw ApiError.forbidden('Access denied');
+    }
+
+    const publicId = this.uploadService.resolveResumePublicId(
+      application.resumePublicId,
+      application.resumePath,
+    );
+
+    if (!publicId) {
+      throw ApiError.notFound('No resume attached to this application');
+    }
+
+    return this.uploadService.getSignedDownloadUrl(publicId, 'raw');
+  }
+
   async getApplicationById(applicationId: string): Promise<IApplication> {
-    const application = await Application.findById(applicationId)
-      .populate({
-        path: 'job',
-        select: 'title company location employer',
-        populate: { path: 'company', select: 'name logoUrl' },
-      })
-      .populate({
-        path: 'applicant',
-        select: 'firstName lastName email phone skills resumePath',
-        model: 'Employee',
-      });
+    const application = await this.applicationRepository.findByIdPopulated(applicationId);
 
     if (!application) {
       throw ApiError.notFound('Application not found');
@@ -94,58 +177,21 @@ class ApplicationService {
     return application;
   }
 
-  /** Returns paginated applications submitted by the given applicant, optionally filtered by status */
   async getMyApplications(
     applicantId: string,
     options: PaginationOptions,
-    status?: string
+    status?: string,
   ): Promise<PaginatedResult<IApplication>> {
-    const { page, limit, sort = 'createdAt', order = 'desc' } = options;
-    const skip = (page - 1) * limit;
-
-    const query: any = { applicant: applicantId };
-    if (status) {
-      query.status = status;
-    }
-
-    const [applications, total] = await Promise.all([
-      Application.find(query)
-        .populate({
-          path: 'job',
-          select: 'title company location jobType workMode',
-          populate: { path: 'company', select: 'name logoUrl' },
-        })
-        .sort({ [sort]: order === 'asc' ? 1 : -1 })
-        .skip(skip)
-        .limit(limit),
-      Application.countDocuments(query),
-    ]);
-
-    return {
-      data: applications,
-      pagination: {
-        total,
-        page,
-        limit,
-        pages: Math.ceil(total / limit),
-        hasNext: page < Math.ceil(total / limit),
-        hasPrev: page > 1,
-      },
-    };
+    return this.applicationRepository.findByApplicant(applicantId, options, status);
   }
 
-  /** Returns paginated applications for a specific job, verifying the employer owns the job. Premium applicants are shown first. */
   async getJobApplications(
     jobId: string,
     employerId: string,
     options: PaginationOptions,
-    status?: string
-  ): Promise<PaginatedResult<IApplication>> {
-    const { page, limit, sort = 'createdAt', order = 'desc' } = options;
-    const skip = (page - 1) * limit;
-
-    // Verify that employer owns the job
-    const job = await Job.findById(jobId);
+    status?: string,
+  ): Promise<PaginatedResult<ApplicationListItem>> {
+    const job = await this.jobRepository.findById(jobId);
     if (!job) {
       throw ApiError.notFound('Job not found');
     }
@@ -154,40 +200,14 @@ class ApplicationService {
       throw ApiError.forbidden('You can only view applications for your own jobs');
     }
 
-    const query: any = { job: jobId };
-    if (status) {
-      query.status = status;
-    }
-
-    // Get all applications
-    const [applications, total] = await Promise.all([
-      Application.find(query)
-        .populate({
-          path: 'applicant',
-          select: 'firstName lastName email phone skills resumePath avatar bio headline',
-          model: 'Employee',
-        })
-        .sort({ [sort]: order === 'asc' ? 1 : -1 })
-        .skip(skip)
-        .limit(limit),
-      Application.countDocuments(query),
-    ]);
-
-    // Sort premium applicants first (those with active Premium/Enterprise subscriptions)
-    const Subscription = (await import('../models/Subscription')).default;
-    const { SubscriptionStatus, PlanType } = await import('../models/Subscription');
+    const result = await this.applicationRepository.findByJob(jobId, options, status);
+    const applications = result.data;
 
     const applicantIds = applications.map(a => a.applicant?._id?.toString() || a.applicant?.toString());
-    const premiumSubs = await Subscription.find({
-      user: { $in: applicantIds },
-      status: SubscriptionStatus.ACTIVE,
-      plan: { $in: [PlanType.PREMIUM, PlanType.ENTERPRISE] },
-      endDate: { $gte: new Date() },
-    }).select('user');
+    const premiumSubs = await this.applicationRepository.findPremiumSubscriptions(applicantIds);
 
     const premiumUserIds = new Set(premiumSubs.map(s => s.user.toString()));
 
-    // Sort: premium applicants first, then by original sort order
     const sorted = [...applications].sort((a, b) => {
       const aId = a.applicant?._id?.toString() || a.applicant?.toString();
       const bId = b.applicant?._id?.toString() || b.applicant?.toString();
@@ -195,35 +215,27 @@ class ApplicationService {
       const bIsPremium = premiumUserIds.has(bId);
       if (aIsPremium && !bIsPremium) return -1;
       if (!aIsPremium && bIsPremium) return 1;
-      return 0; // maintain original order for same tier
+      return 0;
     });
 
     return {
-      data: sorted,
-      pagination: {
-        total,
-        page,
-        limit,
-        pages: Math.ceil(total / limit),
-        hasNext: page < Math.ceil(total / limit),
-        hasPrev: page > 1,
-      },
+      data: sorted.map((application) => this.sanitizeApplicationForEmployer(application)),
+      pagination: result.pagination,
     };
   }
 
-  /** Updates application status, records it in status history, and notifies the applicant */
   async updateApplicationStatus(
     applicationId: string,
     employerId: string,
     newStatus: ApplicationStatus,
-    note?: string
+    note?: string,
   ): Promise<IApplication> {
-    const application = await Application.findById(applicationId);
+    const application = await this.applicationRepository.findById(applicationId);
     if (!application) {
       throw ApiError.notFound('Application not found');
     }
 
-    const job = await Job.findById(application.job);
+    const job = await this.jobRepository.findById(application.job.toString());
     if (!job) {
       throw ApiError.notFound('Associated job not found');
     }
@@ -241,23 +253,21 @@ class ApplicationService {
 
     await application.save();
 
-    // Notify applicant about status change
-    await notificationService.notifyApplicationStatusChange(
+    await this.notificationService.notifyApplicationStatusChange(
       application.applicant.toString(),
       application._id.toString(),
       newStatus,
-      job.title
+      job.title,
     );
 
     return application.populate([
       { path: 'job', select: 'title company location' },
-      { path: 'applicant', select: 'firstName lastName email', model: 'Employee' },
+      { path: 'applicant', select: 'firstName lastName email' },
     ]);
   }
 
-  /** Allows an applicant to withdraw their own application. Notifies the employer. */
   async withdrawApplication(applicationId: string, applicantId: string): Promise<IApplication> {
-    const application = await Application.findById(applicationId);
+    const application = await this.applicationRepository.findById(applicationId);
     if (!application) {
       throw ApiError.notFound('Application not found');
     }
@@ -279,14 +289,12 @@ class ApplicationService {
 
     await application.save();
 
-    // Notify the employer about the withdrawal
-    const job = await Job.findById(application.job);
+    const job = await this.jobRepository.findById(application.job.toString());
     if (job) {
-      const Employee = (await import('../models/Employee')).default;
-      const applicant = await Employee.findById(applicantId).select('firstName lastName');
+      const applicant = await this.userRepository.findEmployeeByIdSelect(applicantId, 'firstName lastName');
       const applicantName = applicant ? `${applicant.firstName} ${applicant.lastName}` : 'A candidate';
 
-      await notificationService.createNotification({
+      await this.notificationService.createNotification({
         recipient: job.employer.toString(),
         recipientRole: UserRole.EMPLOYER,
         type: NotificationType.APPLICATION_STATUS_CHANGED,
@@ -300,5 +308,3 @@ class ApplicationService {
     return application;
   }
 }
-
-export default new ApplicationService();

@@ -1,6 +1,5 @@
 import { Router } from 'express';
-import subscriptionController from '../controllers/subscription.controller';
-import { authenticate } from '../middleware/auth';
+import { subscriptionController, authenticate } from '../container';
 import { validate } from '../middleware/validate';
 import { cacheResponse } from '../middleware/cache';
 import { createOrderSchema, verifyPaymentSchema } from '../validators/subscription.validator';
@@ -11,11 +10,11 @@ const router = Router();
 router.get('/plans', cacheResponse(600), subscriptionController.getPlans);
 
 // Authenticated
-router.post('/create-order', authenticate, validate(createOrderSchema), subscriptionController.createOrder as any);
-router.post('/verify-payment', authenticate, validate(verifyPaymentSchema), subscriptionController.verifyPayment as any);
-router.get('/my-subscription', authenticate, subscriptionController.getMySubscription as any);
-router.post('/cancel', authenticate, subscriptionController.cancelSubscription as any);
-router.get('/invoice/:subscriptionId', authenticate, subscriptionController.downloadInvoice as any);
+router.post('/create-order', authenticate, validate(createOrderSchema), subscriptionController.createOrder);
+router.post('/verify-payment', authenticate, validate(verifyPaymentSchema), subscriptionController.verifyPayment);
+router.get('/my-subscription', authenticate, subscriptionController.getMySubscription);
+router.post('/cancel', authenticate, subscriptionController.cancelSubscription);
+router.get('/invoice/:subscriptionId', authenticate, subscriptionController.downloadInvoice);
 
 // Razorpay webhook (no auth)
 router.post('/webhook', subscriptionController.webhook);

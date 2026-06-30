@@ -1,6 +1,5 @@
 import { Router } from 'express';
-import uploadController from '../controllers/upload.controller';
-import { authenticate } from '../middleware/auth';
+import { uploadController, authenticate } from '../container';
 import { roleGuard } from '../middleware/roleGuard';
 import { uploadAvatar, uploadLogo, uploadResume, handleMulterError } from '../middleware/upload';
 import { UserRole } from '../types';
@@ -15,7 +14,7 @@ router.post(
   '/avatar',
   uploadAvatar,
   handleMulterError,
-  uploadController.uploadAvatar as any
+  uploadController.uploadAvatar
 );
 
 // Company logo upload (employer only)
@@ -24,7 +23,7 @@ router.post(
   roleGuard(UserRole.EMPLOYER),
   uploadLogo,
   handleMulterError,
-  uploadController.uploadCompanyLogo as any
+  uploadController.uploadCompanyLogo
 );
 
 // Resume upload (employee only)
@@ -33,13 +32,19 @@ router.post(
   roleGuard(UserRole.EMPLOYEE),
   uploadResume,
   handleMulterError,
-  uploadController.uploadResume as any
+  uploadController.uploadResume
+);
+
+router.get(
+  '/resume/download',
+  roleGuard(UserRole.EMPLOYEE),
+  uploadController.getResumeDownloadUrl
 );
 
 // Delete file (both roles)
 router.delete(
   '/file',
-  uploadController.deleteFile as any
+  uploadController.deleteFile
 );
 
 export default router;

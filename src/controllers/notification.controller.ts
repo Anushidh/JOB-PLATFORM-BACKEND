@@ -1,17 +1,17 @@
-import { Response, NextFunction } from 'express';
-import notificationService from '../services/notification.service';
+import { Request, Response, NextFunction } from 'express';
+import { NotificationService } from '../services/notification.service';
 import { ApiResponse } from '../utils/apiResponse';
-import { AuthRequest } from '../types';
 import { DEFAULT_PAGE, DEFAULT_LIMIT } from '../utils/constants';
 
-class NotificationController {
-  async getNotifications(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+export class NotificationController {
+  constructor(private readonly notificationService: NotificationService) {}
+  async getNotifications(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const page = parseInt(req.query.page as string) || DEFAULT_PAGE;
       const limit = parseInt(req.query.limit as string) || DEFAULT_LIMIT;
       const unreadOnly = req.query.unread === 'true';
 
-      const result = await notificationService.getUserNotifications(
+      const result = await this.notificationService.getUserNotifications(
         req.userId!,
         req.userRole!,
         { page, limit },
@@ -23,9 +23,9 @@ class NotificationController {
     }
   }
 
-  async markAsRead(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  async markAsRead(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const notification = await notificationService.markAsRead(
+      const notification = await this.notificationService.markAsRead(
         req.params.notificationId,
         req.userId!
       );
@@ -35,27 +35,27 @@ class NotificationController {
     }
   }
 
-  async markAllAsRead(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  async markAllAsRead(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      await notificationService.markAllAsRead(req.userId!, req.userRole!);
+      await this.notificationService.markAllAsRead(req.userId!, req.userRole!);
       ApiResponse.success(res, null, 'All notifications marked as read');
     } catch (error) {
       next(error);
     }
   }
 
-  async getUnreadCount(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  async getUnreadCount(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const count = await notificationService.getUnreadCount(req.userId!, req.userRole!);
+      const count = await this.notificationService.getUnreadCount(req.userId!, req.userRole!);
       ApiResponse.success(res, { count }, 'Unread count retrieved');
     } catch (error) {
       next(error);
     }
   }
 
-  async deleteNotification(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  async deleteNotification(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      await notificationService.deleteNotification(
+      await this.notificationService.deleteNotification(
         req.params.notificationId,
         req.userId!
       );
@@ -66,4 +66,3 @@ class NotificationController {
   }
 }
 
-export default new NotificationController();

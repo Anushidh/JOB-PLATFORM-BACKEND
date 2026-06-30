@@ -1,9 +1,8 @@
-import JobAlert, { IJobAlert } from '../models/JobAlert';
-import Job from '../models/Job';
-import Employee from '../models/Employee';
 import { ApiError } from '../utils/apiError';
+import { JobAlertRepository } from '../repositories/jobAlert.repository';
+import { JobRepository } from '../repositories/job.repository';
+import { IJobAlert } from '../models/JobAlert';
 import { JobStatus } from '../types';
-import emailService from './email.service';
 
 const MAX_ALERTS_PER_USER = 5;
 
@@ -21,29 +20,29 @@ interface AlertData {
   frequency: 'daily' | 'weekly' | 'instant';
 }
 
-class JobAlertService {
-  /** Creates a job alert with filter criteria, enforcing a max of 5 alerts per user */
+export class JobAlertService {
+  constructor(
+    private readonly jobAlertRepository: JobAlertRepository,
+    private readonly jobRepository: JobRepository,
+  ) {}
+
   async createAlert(employeeId: string, data: AlertData): Promise<IJobAlert> {
-    // Check max alerts limit
-    const alertCount = await JobAlert.countDocuments({ employee: employeeId });
+    const alertCount = await this.jobAlertRepository.countByEmployee(employeeId);
     if (alertCount >= MAX_ALERTS_PER_USER) {
       throw ApiError.badRequest(`You can have a maximum of ${MAX_ALERTS_PER_USER} job alerts`);
     }
 
-    const alert = await JobAlert.create({
+    return this.jobAlertRepository.create({
       employee: employeeId,
       name: data.name,
       filters: data.filters,
       frequency: data.frequency,
       isActive: true,
     });
-
-    return alert;
   }
 
-  /** Updates alert name, filters, or frequency */
   async updateAlert(alertId: string, employeeId: string, data: Partial<AlertData>): Promise<IJobAlert> {
-    const alert = await JobAlert.findOne({ _id: alertId, employee: employeeId });
+    const alert = await this.jobAlertRepository.findByIdAndEmployee(alertId, employeeId);
     if (!alert) {
       throw ApiError.notFound('Job alert not found');
     }
@@ -56,24 +55,21 @@ class JobAlertService {
     return alert;
   }
 
-  /** Permanently deletes a job alert */
   async deleteAlert(alertId: string, employeeId: string): Promise<void> {
-    const alert = await JobAlert.findOne({ _id: alertId, employee: employeeId });
+    const alert = await this.jobAlertRepository.findByIdAndEmployee(alertId, employeeId);
     if (!alert) {
       throw ApiError.notFound('Job alert not found');
     }
 
-    await JobAlert.deleteOne({ _id: alertId });
+    await this.jobAlertRepository.deleteById(alertId);
   }
 
-  /** Returns all job alerts belonging to an employee */
   async getMyAlerts(employeeId: string): Promise<IJobAlert[]> {
-    return JobAlert.find({ employee: employeeId }).sort({ createdAt: -1 });
+    return this.jobAlertRepository.findByEmployee(employeeId);
   }
 
-  /** Toggles an alert's active/inactive state */
   async toggleAlert(alertId: string, employeeId: string): Promise<IJobAlert> {
-    const alert = await JobAlert.findOne({ _id: alertId, employee: employeeId });
+    const alert = await this.jobAlertRepository.findByIdAndEmployee(alertId, employeeId);
     if (!alert) {
       throw ApiError.notFound('Job alert not found');
     }
@@ -83,9 +79,8 @@ class JobAlertService {
     return alert;
   }
 
-  /** Builds a MongoDB query from alert filter criteria and an optional since-date */
   private buildJobQuery(filters: IJobAlert['filters'], since?: Date) {
-    const query: any = { status: JobStatus.ACTIVE };
+    const query: Record<string, unknown> = { status: JobStatus.ACTIVE };
 
     if (since) {
       query.createdAt = { $gte: since };
@@ -126,41 +121,33 @@ class JobAlertService {
     return query;
   }
 
-  /** Processes daily/weekly alerts: finds matching new jobs since last send and emails results */
   async checkAndSendAlerts(): Promise<void> {
     const now = new Date();
 
-    // Get all active daily and weekly alerts
-    const alerts = await JobAlert.find({
-      isActive: true,
-      frequency: { $in: ['daily', 'weekly'] },
-    }).populate('employee', 'email firstName');
+    const alerts = await this.jobAlertRepository.findActiveByFrequency(['daily', 'weekly']);
 
     for (const alert of alerts) {
       try {
-        // Determine if it's time to send based on frequency
         if (alert.lastSentAt) {
           const hoursSinceLastSent = (now.getTime() - alert.lastSentAt.getTime()) / (1000 * 60 * 60);
           if (alert.frequency === 'daily' && hoursSinceLastSent < 24) continue;
           if (alert.frequency === 'weekly' && hoursSinceLastSent < 168) continue;
         }
 
-        // Query for matching jobs since last sent
         const since = alert.lastSentAt || new Date(now.getTime() - 24 * 60 * 60 * 1000);
         const query = this.buildJobQuery(alert.filters, since);
-        const matchingJobs = await Job.find(query).limit(10).select('title company location jobType');
+        const matchingJobs = await this.jobRepository.findMatching(query, since, 10);
 
         if (matchingJobs.length > 0) {
-          const employee = alert.employee as any;
+          const employee = alert.employee as unknown as { email: string; firstName: string };
           await this.sendAlertEmail(
             employee.email,
             employee.firstName,
             alert.name,
-            matchingJobs
+            matchingJobs,
           );
         }
 
-        // Update lastSentAt
         alert.lastSentAt = now;
         await alert.save();
       } catch (error) {
@@ -169,30 +156,24 @@ class JobAlertService {
     }
   }
 
-  /** Checks all instant alerts when a job is activated and emails matching subscribers */
   async checkInstantAlerts(jobId: string): Promise<void> {
-    const job = await Job.findById(jobId);
+    const job = await this.jobRepository.findById(jobId);
     if (!job || job.status !== JobStatus.ACTIVE) return;
 
-    // Get all active instant alerts
-    const alerts = await JobAlert.find({
-      isActive: true,
-      frequency: 'instant',
-    }).populate('employee', 'email firstName');
+    const alerts = await this.jobAlertRepository.findActiveInstant();
 
     for (const alert of alerts) {
       try {
         const query = this.buildJobQuery(alert.filters);
-        // Check if this specific job matches the alert filters
-        const matchingJob = await Job.findOne({ _id: jobId, ...query });
+        const matchingJob = await this.jobRepository.findOneMatching(jobId, query);
 
         if (matchingJob) {
-          const employee = alert.employee as any;
+          const employee = alert.employee as unknown as { email: string; firstName: string };
           await this.sendAlertEmail(
             employee.email,
             employee.firstName,
             alert.name,
-            [matchingJob]
+            [matchingJob],
           );
 
           alert.lastSentAt = new Date();
@@ -204,12 +185,11 @@ class JobAlertService {
     }
   }
 
-  /** Sends an HTML email listing matching job openings for an alert */
   private async sendAlertEmail(
     email: string,
     firstName: string,
     alertName: string,
-    jobs: any[]
+    jobs: { title: string; location: string; jobType: string }[],
   ): Promise<void> {
     const jobListHtml = jobs
       .map((job) => `<li><strong>${job.title}</strong> — ${job.location} (${job.jobType})</li>`)
@@ -235,7 +215,6 @@ class JobAlertService {
       </div>
     `;
 
-    // Use the email service's send method pattern
     const nodemailer = await import('nodemailer');
     const transporter = nodemailer.createTransport({
       host: process.env.SMTP_HOST || 'smtp.gmail.com',
@@ -259,5 +238,3 @@ class JobAlertService {
     }
   }
 }
-
-export default new JobAlertService();

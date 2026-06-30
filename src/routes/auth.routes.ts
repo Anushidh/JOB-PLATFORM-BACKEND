@@ -1,6 +1,5 @@
 import { Router } from 'express';
-import authController from '../controllers/auth.controller';
-import { authenticate } from '../middleware/auth';
+import { authController, authenticate } from '../container';
 import { validate } from '../middleware/validate';
 import { authLimiter, otpLimiter, sensitiveLimiter } from '../middleware/rateLimiter';
 import {
@@ -34,7 +33,7 @@ router.post('/reset-password', authLimiter, validate(resetPasswordSchema), authC
 
 // Token & Session
 router.post('/refresh-token', sensitiveLimiter, validate(refreshTokenSchema), authController.refreshToken);
-router.post('/logout', authenticate, authController.logout as any);
-router.get('/me', authenticate, authController.me as any);
+router.post('/logout', authenticate, authController.logout);
+router.get('/me', authenticate, authController.me);
 
 export default router;

@@ -1,12 +1,16 @@
-import { Response, NextFunction } from 'express';
-import adminService from '../services/admin.service';
-import revenueService from '../services/revenue.service';
+import { Request, Response, NextFunction } from 'express';
+import { AdminService } from '../services/admin.service';
+import { RevenueService } from '../services/revenue.service';
 import { ApiResponse } from '../utils/apiResponse';
-import { AuthRequest, UserRole } from '../types';
+import { UserRole } from '../types';
 import { DEFAULT_PAGE, DEFAULT_LIMIT } from '../utils/constants';
 
-class AdminController {
-  async getAllEmployees(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+export class AdminController {
+  constructor(
+    private readonly adminService: AdminService,
+    private readonly revenueService: RevenueService,
+  ) {}
+  async getAllEmployees(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const page = parseInt(req.query.page as string) || DEFAULT_PAGE;
       const limit = parseInt(req.query.limit as string) || DEFAULT_LIMIT;
@@ -14,14 +18,14 @@ class AdminController {
       const order = req.query.order as 'asc' | 'desc';
       const search = req.query.search as string;
 
-      const result = await adminService.getAllEmployees({ page, limit, sort, order }, search);
+      const result = await this.adminService.getAllEmployees({ page, limit, sort, order }, search);
       ApiResponse.paginated(res, result.data, result.pagination.total, page, limit);
     } catch (error) {
       next(error);
     }
   }
 
-  async getAllEmployers(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  async getAllEmployers(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const page = parseInt(req.query.page as string) || DEFAULT_PAGE;
       const limit = parseInt(req.query.limit as string) || DEFAULT_LIMIT;
@@ -29,114 +33,114 @@ class AdminController {
       const order = req.query.order as 'asc' | 'desc';
       const search = req.query.search as string;
 
-      const result = await adminService.getAllEmployers({ page, limit, sort, order }, search);
+      const result = await this.adminService.getAllEmployers({ page, limit, sort, order }, search);
       ApiResponse.paginated(res, result.data, result.pagination.total, page, limit);
     } catch (error) {
       next(error);
     }
   }
 
-  async suspendUser(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  async suspendUser(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const role = req.params.role as UserRole;
       if (![UserRole.EMPLOYEE, UserRole.EMPLOYER].includes(role)) {
         res.status(400).json({ success: false, message: 'Invalid role. Must be employee or employer.' });
         return;
       }
-      const user = await adminService.suspendUser(req.params.userId, role);
+      const user = await this.adminService.suspendUser(req.params.userId, role);
       ApiResponse.success(res, { user }, 'User suspended successfully');
     } catch (error) {
       next(error);
     }
   }
 
-  async reactivateUser(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  async reactivateUser(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const role = req.params.role as UserRole;
       if (![UserRole.EMPLOYEE, UserRole.EMPLOYER].includes(role)) {
         res.status(400).json({ success: false, message: 'Invalid role. Must be employee or employer.' });
         return;
       }
-      const user = await adminService.reactivateUser(req.params.userId, role);
+      const user = await this.adminService.reactivateUser(req.params.userId, role);
       ApiResponse.success(res, { user }, 'User reactivated successfully');
     } catch (error) {
       next(error);
     }
   }
 
-  async deleteUser(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  async deleteUser(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const role = req.params.role as UserRole;
       if (![UserRole.EMPLOYEE, UserRole.EMPLOYER].includes(role)) {
         res.status(400).json({ success: false, message: 'Invalid role. Must be employee or employer.' });
         return;
       }
-      await adminService.deleteUser(req.params.userId, role);
+      await this.adminService.deleteUser(req.params.userId, role);
       ApiResponse.success(res, null, 'User deleted successfully');
     } catch (error) {
       next(error);
     }
   }
 
-  async getPendingJobs(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  async getPendingJobs(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const page = parseInt(req.query.page as string) || DEFAULT_PAGE;
       const limit = parseInt(req.query.limit as string) || DEFAULT_LIMIT;
       const sort = req.query.sort as string;
       const order = req.query.order as 'asc' | 'desc';
 
-      const result = await adminService.getPendingJobs({ page, limit, sort, order });
+      const result = await this.adminService.getPendingJobs({ page, limit, sort, order });
       ApiResponse.paginated(res, result.data, result.pagination.total, page, limit);
     } catch (error) {
       next(error);
     }
   }
 
-  async approveJob(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  async approveJob(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const job = await adminService.approveJob(req.params.jobId);
+      const job = await this.adminService.approveJob(req.params.jobId);
       ApiResponse.success(res, { job }, 'Job approved successfully');
     } catch (error) {
       next(error);
     }
   }
 
-  async rejectJob(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  async rejectJob(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { reason } = req.body;
-      const job = await adminService.rejectJob(req.params.jobId, reason);
+      const job = await this.adminService.rejectJob(req.params.jobId, reason);
       ApiResponse.success(res, { job }, 'Job rejected');
     } catch (error) {
       next(error);
     }
   }
 
-  async getPlatformStats(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  async getPlatformStats(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const stats = await adminService.getPlatformStats();
+      const stats = await this.adminService.getPlatformStats();
       ApiResponse.success(res, { stats }, 'Platform stats retrieved');
     } catch (error) {
       next(error);
     }
   }
 
-  async getRevenueStats(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  async getRevenueStats(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const stats = await revenueService.getRevenueStats();
+      const stats = await this.revenueService.getRevenueStats();
       ApiResponse.success(res, stats, 'Revenue stats retrieved');
     } catch (error) {
       next(error);
     }
   }
 
-  async getPaymentHistory(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  async getPaymentHistory(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const page = parseInt(req.query.page as string) || DEFAULT_PAGE;
       const limit = parseInt(req.query.limit as string) || DEFAULT_LIMIT;
       const sort = req.query.sort as string;
       const order = req.query.order as 'asc' | 'desc';
 
-      const result = await revenueService.getPaymentHistory({ page, limit, sort, order });
+      const result = await this.revenueService.getPaymentHistory({ page, limit, sort, order });
       ApiResponse.paginated(res, result.data, result.pagination.total, page, limit);
     } catch (error) {
       next(error);
@@ -144,4 +148,3 @@ class AdminController {
   }
 }
 
-export default new AdminController();

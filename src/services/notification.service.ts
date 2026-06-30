@@ -1,10 +1,14 @@
-import Notification from '../models/Notification';
 import { ApiError } from '../utils/apiError';
+import { NotificationRepository } from '../repositories/notification.repository';
+import { RealtimeAdapter } from './adapters/realtime.adapter';
 import { INotification, NotificationType, ApplicationStatus, UserRole, PaginationOptions, PaginatedResult } from '../types';
-import { emitNotification } from '../socket';
 
-class NotificationService {
-  /** Creates a notification record and emits it in real-time via Socket.IO */
+export class NotificationService {
+  constructor(
+    private readonly notificationRepository: NotificationRepository,
+    private readonly realtimeAdapter: RealtimeAdapter,
+  ) {}
+
   async createNotification(data: {
     recipient: string;
     recipientRole: UserRole;
@@ -14,10 +18,9 @@ class NotificationService {
     relatedId?: string;
     relatedModel?: string;
   }): Promise<INotification> {
-    const notification = await Notification.create(data);
+    const notification = await this.notificationRepository.create(data);
 
-    // Emit real-time notification to recipient
-    emitNotification(data.recipient, {
+    this.realtimeAdapter.emitNotification(data.recipient, {
       _id: notification._id,
       type: notification.type,
       title: notification.title,
@@ -29,45 +32,17 @@ class NotificationService {
     return notification;
   }
 
-  /** Returns paginated notifications for a user, optionally filtering to unread only */
   async getUserNotifications(
     userId: string,
     role: UserRole,
     options: PaginationOptions,
-    unreadOnly = false
+    unreadOnly = false,
   ): Promise<PaginatedResult<INotification>> {
-    const { page, limit } = options;
-    const skip = (page - 1) * limit;
-
-    const query: any = { recipient: userId, recipientRole: role };
-    if (unreadOnly) {
-      query.isRead = false;
-    }
-
-    const [notifications, total] = await Promise.all([
-      Notification.find(query)
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(limit),
-      Notification.countDocuments(query),
-    ]);
-
-    return {
-      data: notifications,
-      pagination: {
-        total,
-        page,
-        limit,
-        pages: Math.ceil(total / limit),
-        hasNext: page < Math.ceil(total / limit),
-        hasPrev: page > 1,
-      },
-    };
+    return this.notificationRepository.findByUser(userId, role, options, unreadOnly);
   }
 
-  /** Marks a single notification as read after verifying ownership */
   async markAsRead(notificationId: string, userId: string): Promise<INotification> {
-    const notification = await Notification.findById(notificationId);
+    const notification = await this.notificationRepository.findById(notificationId);
     if (!notification) {
       throw ApiError.notFound('Notification not found');
     }
@@ -81,22 +56,16 @@ class NotificationService {
     return notification;
   }
 
-  /** Marks all unread notifications as read for the given user */
   async markAllAsRead(userId: string, role: UserRole): Promise<void> {
-    await Notification.updateMany(
-      { recipient: userId, recipientRole: role, isRead: false },
-      { isRead: true }
-    );
+    await this.notificationRepository.markAllAsRead(userId, role);
   }
 
-  /** Returns the count of unread notifications for a user */
   async getUnreadCount(userId: string, role: UserRole): Promise<number> {
-    return Notification.countDocuments({ recipient: userId, recipientRole: role, isRead: false });
+    return this.notificationRepository.countUnread(userId, role);
   }
 
-  /** Permanently deletes a notification after verifying ownership */
   async deleteNotification(notificationId: string, userId: string): Promise<void> {
-    const notification = await Notification.findById(notificationId);
+    const notification = await this.notificationRepository.findById(notificationId);
     if (!notification) {
       throw ApiError.notFound('Notification not found');
     }
@@ -105,14 +74,13 @@ class NotificationService {
       throw ApiError.forbidden('You can only delete your own notifications');
     }
 
-    await Notification.findByIdAndDelete(notificationId);
+    await this.notificationRepository.deleteById(notificationId);
   }
 
-  /** Notifies an employer about a new application received */
   async notifyNewApplication(
     employerId: string,
     applicationId: string,
-    jobTitle: string
+    jobTitle: string,
   ): Promise<void> {
     await this.createNotification({
       recipient: employerId,
@@ -125,12 +93,11 @@ class NotificationService {
     });
   }
 
-  /** Notifies an applicant about a change in their application status */
   async notifyApplicationStatusChange(
     applicantId: string,
     applicationId: string,
     status: ApplicationStatus,
-    jobTitle: string
+    jobTitle: string,
   ): Promise<void> {
     const statusMessages: Record<ApplicationStatus, string> = {
       [ApplicationStatus.APPLIED]: `Your application for "${jobTitle}" has been received`,
@@ -152,12 +119,11 @@ class NotificationService {
     });
   }
 
-  /** Notifies an employer that their job listing was approved or rejected by admin */
   async notifyJobModeration(
     employerId: string,
     jobId: string,
     approved: boolean,
-    jobTitle: string
+    jobTitle: string,
   ): Promise<void> {
     await this.createNotification({
       recipient: employerId,
@@ -172,5 +138,3 @@ class NotificationService {
     });
   }
 }
-
-export default new NotificationService();

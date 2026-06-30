@@ -1,10 +1,8 @@
 import { Router } from 'express';
-import jobController from '../controllers/job.controller';
-import { authenticate } from '../middleware/auth';
+import { jobController, authenticate, requireSubscription } from '../container';
 import { roleGuard } from '../middleware/roleGuard';
 import { validate } from '../middleware/validate';
 import { jobCreationLimiter } from '../middleware/rateLimiter';
-import { requireSubscription } from '../middleware/requireSubscription';
 import { cacheResponse } from '../middleware/cache';
 import { UserRole } from '../types';
 import { createJobSchema, updateJobSchema, changeJobStatusSchema } from '../validators/job.validator';
@@ -19,11 +17,11 @@ router.get(
   '/employer/my-jobs',
   authenticate,
   roleGuard(UserRole.EMPLOYER),
-  jobController.getMyJobs as any
+  jobController.getMyJobs
 );
 
 // Recently viewed (authenticated, before /:jobId)
-router.get('/recently-viewed', authenticate, jobController.getRecentlyViewed as any);
+router.get('/recently-viewed', authenticate, jobController.getRecentlyViewed);
 
 router.post(
   '/',
@@ -32,7 +30,7 @@ router.post(
   requireSubscription('jobPost'),
   jobCreationLimiter,
   validate(createJobSchema),
-  jobController.createJob as any
+  jobController.createJob
 );
 
 // Parameterized routes (cached for 5 minutes)
@@ -42,21 +40,21 @@ router.get('/:jobId', cacheResponse(300), jobController.getJob);
 router.get('/:jobId/similar', cacheResponse(300), jobController.getSimilarJobs);
 
 // Job quick stats (employer only)
-router.get('/:jobId/stats', authenticate, roleGuard(UserRole.EMPLOYER), jobController.getJobQuickStats as any);
+router.get('/:jobId/stats', authenticate, roleGuard(UserRole.EMPLOYER), jobController.getJobQuickStats);
 
 router.put(
   '/:jobId',
   authenticate,
   roleGuard(UserRole.EMPLOYER),
   validate(updateJobSchema),
-  jobController.updateJob as any
+  jobController.updateJob
 );
 
 router.delete(
   '/:jobId',
   authenticate,
   roleGuard(UserRole.EMPLOYER),
-  jobController.deleteJob as any
+  jobController.deleteJob
 );
 
 router.patch(
@@ -64,7 +62,7 @@ router.patch(
   authenticate,
   roleGuard(UserRole.EMPLOYER),
   validate(changeJobStatusSchema),
-  jobController.changeJobStatus as any
+  jobController.changeJobStatus
 );
 
 export default router;

@@ -1,68 +1,59 @@
-import ProfileView, { IProfileView } from '../models/ProfileView';
-import Employee from '../models/Employee';
-import Employer from '../models/Employer';
 import { ApiError } from '../utils/apiError';
+import { ProfileViewRepository } from '../repositories/profileView.repository';
+import { UserRepository } from '../repositories/user.repository';
 import { UserRole, PaginationOptions, PaginatedResult } from '../types';
 
-class ProfileViewService {
-  /** Records a profile view. Limits to one view per viewer per profile per day. */
+export class ProfileViewService {
+  constructor(
+    private readonly profileViewRepository: ProfileViewRepository,
+    private readonly userRepository: UserRepository,
+  ) {}
+
   async recordView(
     profileOwnerId: string,
     profileOwnerRole: UserRole,
     viewerId: string,
-    viewerRole: UserRole
+    viewerRole: UserRole,
   ): Promise<void> {
-    // Don't record self-views
     if (profileOwnerId === viewerId) return;
 
-    // Check if this viewer already viewed this profile today
     const startOfDay = new Date();
     startOfDay.setHours(0, 0, 0, 0);
 
-    const existingView = await ProfileView.findOne({
-      profileOwner: profileOwnerId,
-      viewer: viewerId,
-      viewedAt: { $gte: startOfDay },
-    });
+    const existingView = await this.profileViewRepository.findTodayView(profileOwnerId, viewerId, startOfDay);
 
-    if (existingView) return; // Already recorded today
+    if (existingView) return;
 
-    await ProfileView.create({
+    await this.profileViewRepository.create({
       profileOwner: profileOwnerId,
-      profileOwnerRole: profileOwnerRole,
+      profileOwnerRole,
       viewer: viewerId,
-      viewerRole: viewerRole,
+      viewerRole,
       viewedAt: new Date(),
     });
   }
 
-  /** Returns paginated list of users who viewed the profile (Premium+ only) */
   async getProfileViewers(
     profileOwnerId: string,
-    options: PaginationOptions
-  ): Promise<PaginatedResult<any>> {
+    options: PaginationOptions,
+  ): Promise<PaginatedResult<unknown>> {
     const { page, limit } = options;
     const skip = (page - 1) * limit;
 
-    const query = { profileOwner: profileOwnerId };
-
     const [views, total] = await Promise.all([
-      ProfileView.find(query)
-        .sort({ viewedAt: -1 })
-        .skip(skip)
-        .limit(limit),
-      ProfileView.countDocuments(query),
+      this.profileViewRepository.findByProfileOwner(profileOwnerId, skip, limit),
+      this.profileViewRepository.countByProfileOwner(profileOwnerId),
     ]);
 
-    // Populate viewer details
     const populatedViews = await Promise.all(
       views.map(async (view) => {
-        let viewerInfo: any = { _id: view.viewer, role: view.viewerRole };
+        let viewerInfo: Record<string, unknown> = { _id: view.viewer, role: view.viewerRole };
 
         if (view.viewerRole === UserRole.EMPLOYER) {
-          const employer = await Employer.findById(view.viewer)
-            .select('firstName lastName avatar position')
-            .populate('company', 'name logoUrl');
+          const employer = await this.userRepository.findEmployerByIdSelect(
+            view.viewer.toString(),
+            'firstName lastName avatar position',
+          );
           if (employer) {
             viewerInfo = {
               _id: employer._id,
@@ -70,13 +61,15 @@ class ProfileViewService {
               lastName: employer.lastName,
               avatar: employer.avatar,
               position: employer.position,
-              company: (employer as any).company,
+              company: (employer as { company?: unknown }).company,
               role: view.viewerRole,
             };
           }
         } else if (view.viewerRole === UserRole.EMPLOYEE) {
-          const employee = await Employee.findById(view.viewer)
-            .select('firstName lastName avatar headline');
+          const employee = await this.userRepository.findEmployeeByIdSelect(
+            view.viewer.toString(),
+            'firstName lastName avatar headline',
+          );
           if (employee) {
             viewerInfo = {
               _id: employee._id,
@@ -93,7 +86,7 @@ class ProfileViewService {
           viewer: viewerInfo,
           viewedAt: view.viewedAt,
         };
-      })
+      }),
     );
 
     return {
@@ -109,16 +102,10 @@ class ProfileViewService {
     };
   }
 
-  /** Returns the total number of profile views (last 30 days) */
   async getViewCount(profileOwnerId: string): Promise<number> {
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-    return ProfileView.countDocuments({
-      profileOwner: profileOwnerId,
-      viewedAt: { $gte: thirtyDaysAgo },
-    });
+    return this.profileViewRepository.countRecentViews(profileOwnerId, thirtyDaysAgo);
   }
 }
-
-export default new ProfileViewService();

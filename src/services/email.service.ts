@@ -14,7 +14,7 @@ interface EmailAttachment {
   contentType: string;
 }
 
-class EmailService {
+export class EmailService {
   private transporter: nodemailer.Transporter;
 
   constructor() {
@@ -187,4 +187,3 @@ class EmailService {
   }
 }
 
-export default new EmailService();

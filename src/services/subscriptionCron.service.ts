@@ -1,33 +1,30 @@
-import Subscription, { SubscriptionStatus } from '../models/Subscription';
-import Employee from '../models/Employee';
-import Employer from '../models/Employer';
+import { SubscriptionRepository } from '../repositories/subscription.repository';
+import { AdminRepository } from '../repositories/admin.repository';
+import { EmailService } from './email.service';
+import { SubscriptionStatus } from '../models/Subscription';
 import { UserRole } from '../types';
-import emailService from './email.service';
 import env from '../config/env';
 
-class SubscriptionCronService {
-  /**
-   * Mark expired subscriptions and send post-expiry email.
-   * Runs daily — finds subscriptions where endDate < now and status is still active.
-   */
+export class SubscriptionCronService {
+  constructor(
+    private readonly subscriptionRepository: SubscriptionRepository,
+    private readonly adminRepository: AdminRepository,
+    private readonly emailService: EmailService,
+  ) {}
+
   async processExpiredSubscriptions(): Promise<void> {
     const now = new Date();
 
-    const expiredSubscriptions = await Subscription.find({
-      status: SubscriptionStatus.ACTIVE,
-      endDate: { $lt: now },
-    });
+    const expiredSubscriptions = await this.subscriptionRepository.findExpiredActive(now);
 
     for (const subscription of expiredSubscriptions) {
       try {
-        // Mark as expired
         subscription.status = SubscriptionStatus.EXPIRED;
         await subscription.save();
 
-        // Send post-expiry email
         const { email, name } = await this.getUserInfo(subscription.user.toString(), subscription.userRole as UserRole);
         if (email) {
-          await emailService.sendWithAttachment(
+          await this.emailService.sendWithAttachment(
             email,
             'Your Subscription Has Expired - Job Platform',
             `
@@ -45,7 +42,7 @@ class SubscriptionCronService {
                 </p>
               </div>
             `,
-            []
+            [],
           );
         }
 
@@ -60,23 +57,11 @@ class SubscriptionCronService {
     }
   }
 
-  /**
-   * Send warning emails for subscriptions expiring in 3 days.
-   * Runs daily — finds subscriptions where endDate is between now and now+3 days.
-   */
   async sendExpiryWarnings(): Promise<void> {
     const now = new Date();
     const threeDaysFromNow = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000);
 
-    // Find subscriptions expiring in the next 3 days that haven't been warned yet
-    // We use a date range: endDate is between now and 3 days from now
-    const expiringSubscriptions = await Subscription.find({
-      status: SubscriptionStatus.ACTIVE,
-      endDate: {
-        $gte: now,
-        $lte: threeDaysFromNow,
-      },
-    });
+    const expiringSubscriptions = await this.subscriptionRepository.findExpiringWithin(now, threeDaysFromNow);
 
     for (const subscription of expiringSubscriptions) {
       try {
@@ -84,10 +69,10 @@ class SubscriptionCronService {
         if (!email) continue;
 
         const daysLeft = Math.ceil(
-          (subscription.endDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)
+          (subscription.endDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24),
         );
 
-        await emailService.sendWithAttachment(
+        await this.emailService.sendWithAttachment(
           email,
           `Your Subscription Expires in ${daysLeft} Day${daysLeft > 1 ? 's' : ''} - Job Platform`,
           `
@@ -109,7 +94,7 @@ class SubscriptionCronService {
               </p>
             </div>
           `,
-          []
+          [],
         );
 
         console.log(`[SubscriptionCron] Sent expiry warning to ${email} (${daysLeft} days left)`);
@@ -123,17 +108,8 @@ class SubscriptionCronService {
     }
   }
 
-  /** Looks up email and name for a user by ID and role */
   private async getUserInfo(userId: string, role: UserRole): Promise<{ email: string; name: string }> {
-    if (role === UserRole.EMPLOYEE) {
-      const user = await Employee.findById(userId).select('email firstName');
-      return { email: user?.email || '', name: user?.firstName || 'User' };
-    } else if (role === UserRole.EMPLOYER) {
-      const user = await Employer.findById(userId).select('email firstName');
-      return { email: user?.email || '', name: user?.firstName || 'User' };
-    }
-    return { email: '', name: '' };
+    const user = await this.adminRepository.findUserBasicInfo(userId, role);
+    return { email: user?.email || '', name: user?.firstName || 'User' };
   }
 }
-
-export default new SubscriptionCronService();

@@ -1,6 +1,5 @@
 import { Router } from 'express';
-import companyController from '../controllers/company.controller';
-import { authenticate } from '../middleware/auth';
+import { companyController, authenticate } from '../container';
 import { roleGuard } from '../middleware/roleGuard';
 import { validate } from '../middleware/validate';
 import { cacheResponse } from '../middleware/cache';
@@ -17,7 +16,7 @@ router.get(
   '/my/company',
   authenticate,
   roleGuard(UserRole.EMPLOYER),
-  companyController.getMyCompany as any
+  companyController.getMyCompany
 );
 
 router.post(
@@ -25,7 +24,7 @@ router.post(
   authenticate,
   roleGuard(UserRole.EMPLOYER),
   validate(createCompanySchema),
-  companyController.createCompany as any
+  companyController.createCompany
 );
 
 // Parameterized routes
@@ -36,14 +35,14 @@ router.put(
   authenticate,
   roleGuard(UserRole.EMPLOYER),
   validate(updateCompanySchema),
-  companyController.updateCompany as any
+  companyController.updateCompany
 );
 
 router.delete(
   '/:companyId',
   authenticate,
   roleGuard(UserRole.EMPLOYER),
-  companyController.deleteCompany as any
+  companyController.deleteCompany
 );
 
 export default router;

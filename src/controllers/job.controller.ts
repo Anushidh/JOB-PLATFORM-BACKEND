@@ -1,11 +1,12 @@
 import { Request, Response, NextFunction } from 'express';
-import jobService from '../services/job.service';
+import { JobService } from '../services/job.service';
 import { ApiResponse } from '../utils/apiResponse';
-import { AuthRequest, IEmployer, JobStatus, UserRole } from '../types';
+import { IEmployer, JobStatus, UserRole } from '../types';
 import { DEFAULT_PAGE, DEFAULT_LIMIT } from '../utils/constants';
 
-class JobController {
-  async createJob(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+export class JobController {
+  constructor(private readonly jobService: JobService) {}
+  async createJob(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const employer = req.user as IEmployer;
       const jobData = {
@@ -14,7 +15,7 @@ class JobController {
         company: employer.company,
       };
 
-      const job = await jobService.createJob(jobData);
+      const job = await this.jobService.createJob(jobData);
       ApiResponse.created(res, { job }, 'Job created successfully');
     } catch (error) {
       next(error);
@@ -23,12 +24,12 @@ class JobController {
 
   async getJob(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const job = await jobService.getJobById(req.params.jobId);
+      const job = await this.jobService.getJobById(req.params.jobId);
 
       // Record recent view if user is authenticated
-      const authReq = req as AuthRequest;
+      const authReq = req as Request;
       if (authReq.userId) {
-        jobService.recordRecentView(authReq.userId, req.params.jobId).catch(() => {});
+        this.jobService.recordRecentView(authReq.userId, req.params.jobId).catch(() => {});
       }
 
       ApiResponse.success(res, { job }, 'Job retrieved successfully');
@@ -37,9 +38,9 @@ class JobController {
     }
   }
 
-  async updateJob(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  async updateJob(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const job = await jobService.updateJob(
+      const job = await this.jobService.updateJob(
         req.params.jobId,
         req.userId!,
         req.body
@@ -50,19 +51,19 @@ class JobController {
     }
   }
 
-  async deleteJob(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  async deleteJob(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      await jobService.deleteJob(req.params.jobId, req.userId!);
+      await this.jobService.deleteJob(req.params.jobId, req.userId!);
       ApiResponse.success(res, null, 'Job deleted successfully');
     } catch (error) {
       next(error);
     }
   }
 
-  async changeJobStatus(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  async changeJobStatus(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { status } = req.body;
-      const job = await jobService.changeJobStatus(
+      const job = await this.jobService.changeJobStatus(
         req.params.jobId,
         req.userId!,
         status as JobStatus
@@ -91,14 +92,14 @@ class JobController {
         salaryMax: req.query.salaryMax ? parseInt(req.query.salaryMax as string) : undefined,
       };
 
-      const result = await jobService.getJobs(filters, { page, limit, sort, order });
+      const result = await this.jobService.getJobs(filters, { page, limit, sort, order });
       ApiResponse.paginated(res, result.data, result.pagination.total, page, limit);
     } catch (error) {
       next(error);
     }
   }
 
-  async getMyJobs(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  async getMyJobs(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const page = parseInt(req.query.page as string) || DEFAULT_PAGE;
       const limit = parseInt(req.query.limit as string) || DEFAULT_LIMIT;
@@ -106,7 +107,7 @@ class JobController {
       const order = req.query.order as 'asc' | 'desc';
       const status = req.query.status as string;
 
-      const result = await jobService.getEmployerJobs(
+      const result = await this.jobService.getEmployerJobs(
         req.userId!,
         { page, limit, sort, order },
         status
@@ -119,25 +120,25 @@ class JobController {
 
   async getSimilarJobs(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const jobs = await jobService.getSimilarJobs(req.params.jobId);
+      const jobs = await this.jobService.getSimilarJobs(req.params.jobId);
       ApiResponse.success(res, { jobs }, 'Similar jobs retrieved');
     } catch (error) {
       next(error);
     }
   }
 
-  async getRecentlyViewed(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  async getRecentlyViewed(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const jobs = await jobService.getRecentlyViewed(req.userId!);
+      const jobs = await this.jobService.getRecentlyViewed(req.userId!);
       ApiResponse.success(res, { jobs }, 'Recently viewed jobs retrieved');
     } catch (error) {
       next(error);
     }
   }
 
-  async getJobQuickStats(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  async getJobQuickStats(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const stats = await jobService.getJobQuickStats(req.params.jobId, req.userId!);
+      const stats = await this.jobService.getJobQuickStats(req.params.jobId, req.userId!);
       ApiResponse.success(res, stats, 'Job quick stats retrieved');
     } catch (error) {
       next(error);
@@ -145,4 +146,3 @@ class JobController {
   }
 }
 
-export default new JobController();

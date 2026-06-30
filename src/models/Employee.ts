@@ -68,6 +68,7 @@ const EmployeeSchema = new Schema<IEmployee>(
     education: [EducationSchema],
     portfolioLinks: [{ type: String }],
     resumePath: { type: String },
+    resumePublicId: { type: String },
     bio: { type: String },
     headline: { type: String },
     location: { type: String },

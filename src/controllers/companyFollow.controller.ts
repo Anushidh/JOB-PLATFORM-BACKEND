@@ -1,43 +1,42 @@
 import { Request, Response, NextFunction } from 'express';
-import companyFollowService from '../services/companyFollow.service';
+import { CompanyFollowService } from '../services/companyFollow.service';
 import { ApiResponse } from '../utils/apiResponse';
-import { AuthRequest } from '../types';
 
-class CompanyFollowController {
-  async followCompany(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+export class CompanyFollowController {
+  constructor(private readonly companyFollowService: CompanyFollowService) {}
+  async followCompany(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      await companyFollowService.followCompany(req.userId!, req.params.companyId);
+      await this.companyFollowService.followCompany(req.userId!, req.params.companyId);
       ApiResponse.success(res, null, 'Company followed');
     } catch (error) { next(error); }
   }
 
-  async unfollowCompany(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  async unfollowCompany(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      await companyFollowService.unfollowCompany(req.userId!, req.params.companyId);
+      await this.companyFollowService.unfollowCompany(req.userId!, req.params.companyId);
       ApiResponse.success(res, null, 'Company unfollowed');
     } catch (error) { next(error); }
   }
 
-  async getFollowedCompanies(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  async getFollowedCompanies(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const companies = await companyFollowService.getFollowedCompanies(req.userId!);
+      const companies = await this.companyFollowService.getFollowedCompanies(req.userId!);
       ApiResponse.success(res, { companies }, 'Followed companies retrieved');
     } catch (error) { next(error); }
   }
 
-  async checkFollowing(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  async checkFollowing(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const isFollowing = await companyFollowService.isFollowing(req.userId!, req.params.companyId);
+      const isFollowing = await this.companyFollowService.isFollowing(req.userId!, req.params.companyId);
       ApiResponse.success(res, { isFollowing }, 'Check complete');
     } catch (error) { next(error); }
   }
 
   async getFollowerCount(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const count = await companyFollowService.getFollowerCount(req.params.companyId);
+      const count = await this.companyFollowService.getFollowerCount(req.params.companyId);
       ApiResponse.success(res, { count }, 'Follower count retrieved');
     } catch (error) { next(error); }
   }
 }
 
-export default new CompanyFollowController();
