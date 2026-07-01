@@ -60,6 +60,12 @@ export class MessageService {
       data.recipientRole,
     );
 
+    // If either user had "deleted" this conversation, restore it for them
+    if ((conversation as any).deletedBy?.length > 0) {
+      (conversation as any).deletedBy = [];
+      await conversation.save();
+    }
+
     const message = await this.messageRepository.createMessage({
       conversation: conversation._id,
       sender: { userId: data.senderId, role: data.senderRole },
@@ -159,7 +165,7 @@ export class MessageService {
       throw ApiError.forbidden('You are not a participant of this conversation');
     }
 
-    await this.messageRepository.deleteMessagesByConversation(conversationId);
-    await this.messageRepository.deleteConversation(conversationId);
+    // Soft delete — mark as deleted for this user only
+    await this.messageRepository.markConversationDeletedForUser(conversationId, userId);
   }
 }

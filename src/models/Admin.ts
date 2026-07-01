@@ -36,8 +36,6 @@ const AdminSchema = new Schema<IAdmin>(
   }
 );
 
-AdminSchema.index({ email: 1 });
-
 // Hash password before saving
 AdminSchema.pre('save', async function (next) {
   if (!this.isModified('password')) return next();

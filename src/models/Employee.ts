@@ -89,7 +89,6 @@ const EmployeeSchema = new Schema<IEmployee>(
 );
 
 // Indexes
-EmployeeSchema.index({ email: 1 });
 EmployeeSchema.index({ skills: 1 });
 EmployeeSchema.index({ location: 1 });
 

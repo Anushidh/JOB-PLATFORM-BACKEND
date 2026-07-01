@@ -40,6 +40,8 @@ interface EnvConfig {
   COMPANY_GSTIN: string;
   OPENAI_API_KEY: string;
   SENTRY_DSN: string;
+  ADMIN_EMAIL: string;
+  ADMIN_PASSWORD: string;
 }
 
 function parseExpiryToSeconds(expiry: string): number {
@@ -95,6 +97,8 @@ const env: EnvConfig = {
   COMPANY_GSTIN: process.env.COMPANY_GSTIN || 'XXXXXXXXXXXXXXX',
   OPENAI_API_KEY: process.env.OPENAI_API_KEY || '',
   SENTRY_DSN: process.env.SENTRY_DSN || '',
+  ADMIN_EMAIL: process.env.ADMIN_EMAIL || 'admin@hireflow.dev',
+  ADMIN_PASSWORD: process.env.ADMIN_PASSWORD || 'Admin@123456',
 };
 
 export default env;

@@ -140,22 +140,24 @@ const subscriptionEntitlementService = new SubscriptionEntitlementService(
 const aiService = new AIService(userRepository, jobRepository);
 
 // --- Controllers ---
-export const userController = new UserController(userService, profileViewService);
-export const authController = new AuthController(authService);
-export const companyController = new CompanyController(companyService);
-export const companyFollowController = new CompanyFollowController(companyFollowService);
-export const profileViewController = new ProfileViewController(profileViewService);
-export const savedJobController = new SavedJobController(savedJobService);
-export const jobController = new JobController(jobService);
-export const applicationController = new ApplicationController(applicationService);
-export const notificationController = new NotificationController(notificationService);
-export const messageController = new MessageController(messageService);
-export const analyticsController = new AnalyticsController(analyticsService);
-export const adminController = new AdminController(adminService, revenueService);
-export const subscriptionController = new SubscriptionController(subscriptionService, invoiceService, subscriptionRepository);
-export const jobAlertController = new JobAlertController(jobAlertService);
-export const uploadController = new UploadController(uploadService, userRepository, companyRepository);
-export const aiController = new AIController(aiService, userRepository, jobRepository);
+import { bindMethods } from './utils/bindMethods';
+
+export const userController = bindMethods(new UserController(userService, profileViewService));
+export const authController = bindMethods(new AuthController(authService));
+export const companyController = bindMethods(new CompanyController(companyService));
+export const companyFollowController = bindMethods(new CompanyFollowController(companyFollowService));
+export const profileViewController = bindMethods(new ProfileViewController(profileViewService));
+export const savedJobController = bindMethods(new SavedJobController(savedJobService));
+export const jobController = bindMethods(new JobController(jobService));
+export const applicationController = bindMethods(new ApplicationController(applicationService));
+export const notificationController = bindMethods(new NotificationController(notificationService));
+export const messageController = bindMethods(new MessageController(messageService));
+export const analyticsController = bindMethods(new AnalyticsController(analyticsService));
+export const adminController = bindMethods(new AdminController(adminService, revenueService));
+export const subscriptionController = bindMethods(new SubscriptionController(subscriptionService, invoiceService, subscriptionRepository));
+export const jobAlertController = bindMethods(new JobAlertController(jobAlertService));
+export const uploadController = bindMethods(new UploadController(uploadService, userRepository, companyRepository));
+export const aiController = bindMethods(new AIController(aiService, userRepository, jobRepository));
 
 // --- Middleware ---
 export const authenticate = createAuthenticateMiddleware(tokenService, authRepository);

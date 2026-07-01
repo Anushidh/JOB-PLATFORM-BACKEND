@@ -32,7 +32,7 @@ export class MessageRepository {
     const { page, limit } = options;
     const skip = (page - 1) * limit;
 
-    const query = { 'participants.userId': userId };
+    const query = { 'participants.userId': userId, deletedBy: { $ne: userId } };
 
     const [conversations, total] = await Promise.all([
       this.conversationModel.find(query)
@@ -115,5 +115,12 @@ export class MessageRepository {
 
   deleteConversation(conversationId: string) {
     return this.conversationModel.findByIdAndDelete(conversationId);
+  }
+
+  markConversationDeletedForUser(conversationId: string, userId: string) {
+    return this.conversationModel.findByIdAndUpdate(
+      conversationId,
+      { $addToSet: { deletedBy: userId } },
+    );
   }
 }

@@ -26,8 +26,10 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization'],
 }));
 
-// Global rate limiter
-app.use(globalLimiter);
+// Global rate limiter (skip in development)
+if (env.NODE_ENV !== 'development') {
+  app.use(globalLimiter);
+}
 
 // Body parsing
 app.use(express.json({ limit: '10mb' }));

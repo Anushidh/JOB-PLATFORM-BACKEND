@@ -51,7 +51,6 @@ const ApplicationSchema = new Schema<IApplication>(
 // Prevent duplicate applications
 ApplicationSchema.index({ job: 1, applicant: 1 }, { unique: true });
 ApplicationSchema.index({ applicant: 1 });
-ApplicationSchema.index({ job: 1 });
 ApplicationSchema.index({ status: 1 });
 
 const Application = mongoose.model<IApplication>('Application', ApplicationSchema);

@@ -55,7 +55,6 @@ const EmployerSchema = new Schema<IEmployer>(
 );
 
 // Indexes
-EmployerSchema.index({ email: 1 });
 EmployerSchema.index({ company: 1 });
 
 // Hash password before saving

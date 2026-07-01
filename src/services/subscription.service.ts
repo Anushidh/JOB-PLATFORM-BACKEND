@@ -114,7 +114,7 @@ export class SubscriptionService {
     const order = await razorpay.orders.create({
       amount: plan.amount,
       currency: plan.currency,
-      receipt: `sub_${userId}_${Date.now()}`,
+      receipt: `sub_${userId.slice(-8)}_${Date.now()}`,
       notes: { userId, userRole, planType },
     });
 

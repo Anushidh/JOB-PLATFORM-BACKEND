@@ -5,11 +5,15 @@ import connectDatabase from './config/database';
 import redis from './config/redis';
 import { startCronJobs, stopCronJobs } from './jobs/alertCron';
 import { initializeSocket } from './socket';
+import { seedAdmin } from './utils/seedAdmin';
 
 const startServer = async (): Promise<void> => {
   try {
     // Connect to database
     await connectDatabase();
+
+    // Seed admin if not exists
+    await seedAdmin();
 
     // Verify Redis connection
     await redis.ping();

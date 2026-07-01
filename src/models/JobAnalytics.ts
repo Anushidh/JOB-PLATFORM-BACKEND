@@ -35,7 +35,5 @@ const JobAnalyticsSchema = new Schema<IJobAnalytics>({
   dailyStats: [DailyStatSchema],
 }, { timestamps: true });
 
-JobAnalyticsSchema.index({ job: 1 });
-
 const JobAnalytics = mongoose.model<IJobAnalytics>('JobAnalytics', JobAnalyticsSchema);
 export default JobAnalytics;
