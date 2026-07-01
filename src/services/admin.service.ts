@@ -33,6 +33,28 @@ export class AdminService {
     return this.adminRepository.findAllEmployers(options, search);
   }
 
+  async getUserDetail(userId: string, role: UserRole): Promise<IEmployee | IEmployer> {
+    let user;
+    if (role === UserRole.EMPLOYEE) {
+      user = await this.adminRepository.findEmployeeById(userId);
+    } else {
+      user = await this.adminRepository.findEmployerById(userId);
+      // Populate company for employers
+      if (user && (user as any).company) {
+        const company = await this.companyRepository.findById((user as any).company.toString());
+        if (company) {
+          (user as any).company = company;
+        }
+      }
+    }
+
+    if (!user) {
+      throw new Error('User not found');
+    }
+
+    return user;
+  }
+
   async suspendUser(userId: string, role: UserRole): Promise<IEmployee | IEmployer> {
     let user;
     if (role === UserRole.EMPLOYEE) {

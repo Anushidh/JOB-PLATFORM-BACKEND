@@ -74,7 +74,31 @@ export class RevenueService {
   }
 
   async getPaymentHistory(options: PaginationOptions): Promise<PaginatedResult<unknown>> {
-    return this.subscriptionRepository.findPaymentHistory(options);
+    const result = await this.subscriptionRepository.findPaymentHistory(options);
+
+    // Resolve user names
+    const Employee = (await import('../models/Employee')).default;
+    const Employer = (await import('../models/Employer')).default;
+
+    const enriched = await Promise.all(
+      result.data.map(async (sub: any) => {
+        const obj = typeof sub.toObject === 'function' ? sub.toObject() : { ...sub };
+        try {
+          let user: any = null;
+          if (obj.userRole === 'employee') {
+            user = await Employee.findById(obj.user).select('firstName lastName email').lean();
+          } else {
+            user = await Employer.findById(obj.user).select('firstName lastName email').lean();
+          }
+          obj.user = user ? { _id: obj.user, firstName: user.firstName, lastName: user.lastName, email: user.email } : { _id: obj.user, email: String(obj.user) };
+        } catch {
+          obj.user = { _id: obj.user, email: String(obj.user) };
+        }
+        return obj;
+      }),
+    );
+
+    return { data: enriched, pagination: result.pagination };
   }
 }
 

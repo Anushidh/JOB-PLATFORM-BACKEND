@@ -10,6 +10,10 @@ export class NotificationRepository {
     return this.notificationModel.create(data);
   }
 
+  createMany(data: Record<string, unknown>[]) {
+    return this.notificationModel.insertMany(data);
+  }
+
   async findByUser(
     userId: string,
     role: UserRole,

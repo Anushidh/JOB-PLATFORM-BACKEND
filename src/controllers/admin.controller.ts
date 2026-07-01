@@ -40,6 +40,20 @@ export class AdminController {
     }
   }
 
+  async getUserDetail(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const role = req.params.role as UserRole;
+      if (![UserRole.EMPLOYEE, UserRole.EMPLOYER].includes(role)) {
+        res.status(400).json({ success: false, message: 'Invalid role. Must be employee or employer.' });
+        return;
+      }
+      const user = await this.adminService.getUserDetail(req.params.userId, role);
+      ApiResponse.success(res, { user }, 'User detail retrieved');
+    } catch (error) {
+      next(error);
+    }
+  }
+
   async suspendUser(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const role = req.params.role as UserRole;

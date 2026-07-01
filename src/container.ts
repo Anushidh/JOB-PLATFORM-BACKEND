@@ -159,6 +159,12 @@ export const jobAlertController = bindMethods(new JobAlertController(jobAlertSer
 export const uploadController = bindMethods(new UploadController(uploadService, userRepository, companyRepository));
 export const aiController = bindMethods(new AIController(aiService, userRepository, jobRepository));
 
+// Broadcast
+import { BroadcastService } from './services/broadcast.service';
+import { BroadcastController } from './controllers/broadcast.controller';
+const broadcastService = new BroadcastService(notificationRepository);
+export const broadcastController = bindMethods(new BroadcastController(broadcastService));
+
 // --- Middleware ---
 export const authenticate = createAuthenticateMiddleware(tokenService, authRepository);
 export const requireSubscription = createRequireSubscriptionMiddleware(subscriptionEntitlementService);
