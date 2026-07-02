@@ -38,7 +38,7 @@ interface EnvConfig {
   RAZORPAY_WEBHOOK_SECRET: string;
   COMPANY_STATE: string;
   COMPANY_GSTIN: string;
-  OPENAI_API_KEY: string;
+  GROQ_API_KEY: string;
   SENTRY_DSN: string;
   ADMIN_EMAIL: string;
   ADMIN_PASSWORD: string;
@@ -62,10 +62,10 @@ const refreshExpiry = process.env.JWT_REFRESH_EXPIRY || '7d';
 
 const env: EnvConfig = {
   PORT: parseInt(process.env.PORT || '5000', 10),
-  NODE_ENV: process.env.NODE_ENV || 'development',
+  NODE_ENV: String(process.env.NODE_ENV),
   MONGODB_URI: process.env.MONGODB_URI || 'mongodb://localhost:27017/job-platform',
-  JWT_ACCESS_SECRET: process.env.JWT_ACCESS_SECRET || 'default-access-secret',
-  JWT_REFRESH_SECRET: process.env.JWT_REFRESH_SECRET || 'default-refresh-secret',
+  JWT_ACCESS_SECRET: String(process.env.JWT_ACCESS_SECRET),
+  JWT_REFRESH_SECRET: String(process.env.JWT_REFRESH_SECRET),
   JWT_ACCESS_EXPIRY: process.env.JWT_ACCESS_EXPIRY || '15m',
   JWT_REFRESH_EXPIRY: refreshExpiry,
   JWT_REFRESH_EXPIRY_SECONDS: parseExpiryToSeconds(refreshExpiry),
@@ -82,8 +82,8 @@ const env: EnvConfig = {
   SMTP_PORT: parseInt(process.env.SMTP_PORT || '587', 10),
   SMTP_USER: process.env.SMTP_USER || '',
   SMTP_PASS: process.env.SMTP_PASS || '',
-  SMTP_FROM_NAME: process.env.SMTP_FROM_NAME || 'Job Platform',
-  SMTP_FROM_EMAIL: process.env.SMTP_FROM_EMAIL || 'noreply@jobplatform.com',
+  SMTP_FROM_NAME: process.env.SMTP_FROM_NAME || 'HireFlow',
+  SMTP_FROM_EMAIL: process.env.SMTP_FROM_EMAIL || 'noreply@HireFlow.com',
   GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID || '',
   GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET || '',
   GOOGLE_CALLBACK_URL: process.env.GOOGLE_CALLBACK_URL || 'http://localhost:5000/api/v1/auth/oauth/google/callback',
@@ -95,7 +95,7 @@ const env: EnvConfig = {
   RAZORPAY_WEBHOOK_SECRET: process.env.RAZORPAY_WEBHOOK_SECRET || '',
   COMPANY_STATE: process.env.COMPANY_STATE || 'Maharashtra',
   COMPANY_GSTIN: process.env.COMPANY_GSTIN || 'XXXXXXXXXXXXXXX',
-  OPENAI_API_KEY: process.env.OPENAI_API_KEY || '',
+  GROQ_API_KEY: process.env.GROQ_API_KEY || '',
   SENTRY_DSN: process.env.SENTRY_DSN || '',
   ADMIN_EMAIL: process.env.ADMIN_EMAIL || 'admin@hireflow.dev',
   ADMIN_PASSWORD: process.env.ADMIN_PASSWORD || 'Admin@123456',

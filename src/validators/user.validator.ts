@@ -17,22 +17,50 @@ export const updateEmployeeProfileSchema = z.object({
     portfolioLinks: z.array(z.string().url()).optional(),
     billingState: z.string().max(50).optional(),
     experience: z.array(z.object({
-      title: z.string(),
-      company: z.string(),
+      title: z.string().min(1, 'Job title is required'),
+      company: z.string().min(1, 'Company is required'),
       location: z.string().optional(),
-      startDate: z.string(),
+      startDate: z.string().min(1, 'Start date is required'),
       endDate: z.string().optional(),
       current: z.boolean(),
       description: z.string().optional(),
-    })).optional(),
+    }).refine(
+      (data) => {
+        if (data.startDate && new Date(data.startDate) > new Date()) return false;
+        return true;
+      },
+      { message: 'Start date cannot be in the future', path: ['startDate'] }
+    ).refine(
+      (data) => {
+        if (!data.current && data.endDate && data.startDate) {
+          return new Date(data.endDate) >= new Date(data.startDate);
+        }
+        return true;
+      },
+      { message: 'End date must be after start date', path: ['endDate'] }
+    )).optional(),
     education: z.array(z.object({
-      institution: z.string(),
-      degree: z.string(),
-      fieldOfStudy: z.string(),
-      startDate: z.string(),
+      institution: z.string().min(1, 'Institution is required'),
+      degree: z.string().min(1, 'Degree is required'),
+      fieldOfStudy: z.string().min(1, 'Field of study is required'),
+      startDate: z.string().min(1, 'Start date is required'),
       endDate: z.string().optional(),
       current: z.boolean(),
-    })).optional(),
+    }).refine(
+      (data) => {
+        if (data.startDate && new Date(data.startDate) > new Date()) return false;
+        return true;
+      },
+      { message: 'Start date cannot be in the future', path: ['startDate'] }
+    ).refine(
+      (data) => {
+        if (!data.current && data.endDate && data.startDate) {
+          return new Date(data.endDate) >= new Date(data.startDate);
+        }
+        return true;
+      },
+      { message: 'End date must be after start date', path: ['endDate'] }
+    )).optional(),
   }),
 });
 

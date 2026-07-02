@@ -12,8 +12,8 @@ A comprehensive TypeScript/Express backend for a job portal platform with separa
 - **Payments:** Razorpay
 - **File Storage:** Cloudinary
 - **Email:** Nodemailer (SMTP)
-- **AI:** OpenAI GPT-3.5
-- **PDF:** PDFKit
+- **AI:** Groq (Llama 3.3 70B) via OpenAI-compatible SDK
+- **PDF Parsing:** pdf-parse v2
 - **Auth:** JWT (access + refresh tokens)
 - **Validation:** Zod
 - **Error Tracking:** Sentry
@@ -66,7 +66,7 @@ See `.env.example` for the full list. Critical ones:
 | `CLOUDINARY_*` | Cloudinary credentials |
 | `SMTP_*` | Email server config |
 | `RAZORPAY_*` | Payment gateway keys |
-| `OPENAI_API_KEY` | OpenAI API key |
+| `GROQ_API_KEY` | Groq API key (AI features) |
 | `SENTRY_DSN` | Sentry error tracking (optional) |
 | `COMPANY_STATE` | Your registered state (for GST) |
 | `COMPANY_GSTIN` | Your GSTIN |

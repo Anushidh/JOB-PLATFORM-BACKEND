@@ -108,6 +108,7 @@ const applicationService = new ApplicationService(
   notificationService,
   analyticsService,
   uploadService,
+  emailService,
 );
 const messageService = new MessageService(messageRepository, userRepository, realtimeAdapter);
 const adminService = new AdminService(

@@ -1,12 +1,15 @@
 import OpenAI from 'openai';
-import pdf from 'pdf-parse';
+import { PDFParse } from 'pdf-parse';
 import env from '../config/env';
 import { UserRepository } from '../repositories/user.repository';
 import { JobRepository } from '../repositories/job.repository';
 import { ApiError } from '../utils/apiError';
 import { IEmployee, IJob } from '../types';
 
-const openai = new OpenAI({ apiKey: env.OPENAI_API_KEY });
+const groq = new OpenAI({
+  apiKey: env.GROQ_API_KEY,
+  baseURL: 'https://api.groq.com/openai/v1',
+});
 
 interface ParsedResume {
   firstName?: string;
@@ -55,11 +58,12 @@ export class AIService {
   ) {}
   /** Extracts text from a PDF buffer using pdf-parse */
   async extractTextFromPdf(pdfBuffer: Buffer): Promise<string> {
-    const data = await (pdf as any)(pdfBuffer);
-    return data.text;
+    const parser = new PDFParse({ data: pdfBuffer });
+    const result = await parser.getText();
+    return result.text;
   }
 
-  /** Parses a resume PDF into structured profile data using OpenAI */
+  /** Parses a resume PDF into structured profile data using Groq */
   async parseResume(pdfBuffer: Buffer): Promise<ParsedResume> {
     const text = await this.extractTextFromPdf(pdfBuffer);
 
@@ -67,8 +71,8 @@ export class AIService {
       throw ApiError.badRequest('Could not extract meaningful text from the PDF');
     }
 
-    const response = await openai.chat.completions.create({
-      model: 'gpt-3.5-turbo',
+    const response = await groq.chat.completions.create({
+      model: 'llama-3.3-70b-versatile',
       temperature: 0,
       response_format: { type: 'json_object' },
       messages: [
@@ -143,10 +147,10 @@ Write a compelling job description that includes:
 4. Nice-to-have qualifications (3-4 bullet points)
 5. What we offer / perks (4-5 bullet points)
 
-Keep it professional, concise, and engaging. Do NOT include salary information in the description itself.`;
+Keep it professional, concise, and engaging. Do NOT include salary information in the description itself. Do NOT include the job title as a heading — start directly with the role summary.`;
 
-    const response = await openai.chat.completions.create({
-      model: 'gpt-3.5-turbo',
+    const response = await groq.chat.completions.create({
+      model: 'llama-3.3-70b-versatile',
       temperature: 0.7,
       max_tokens: 1000,
       messages: [
@@ -208,8 +212,8 @@ Write a concise, personalized cover letter (250-350 words) that:
 
 Keep it professional but personable. Don't be generic.`;
 
-    const response = await openai.chat.completions.create({
-      model: 'gpt-3.5-turbo',
+    const response = await groq.chat.completions.create({
+      model: 'llama-3.3-70b-versatile',
       temperature: 0.7,
       max_tokens: 600,
       messages: [

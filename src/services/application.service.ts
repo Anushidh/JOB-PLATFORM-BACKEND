@@ -6,6 +6,7 @@ import { UserRepository } from '../repositories/user.repository';
 import { NotificationService } from './notification.service';
 import { AnalyticsService } from './analytics.service';
 import { UploadService } from './upload.service';
+import { EmailService } from './email.service';
 import {
   IApplication,
   ApplicationStatus,
@@ -26,6 +27,7 @@ interface ApplyData {
 
 interface ApplicationListItem {
   hasResume: boolean;
+  isPriority: boolean;
   [key: string]: unknown;
 }
 
@@ -37,6 +39,7 @@ export class ApplicationService {
     private readonly notificationService: NotificationService,
     private readonly analyticsService: AnalyticsService,
     private readonly uploadService: UploadService,
+    private readonly emailService: EmailService,
   ) {}
 
   private sanitizeApplicationForEmployer(application: IApplication): ApplicationListItem {
@@ -48,7 +51,7 @@ export class ApplicationService {
     delete obj.resumePath;
     delete obj.resumePublicId;
 
-    return { ...obj, hasResume } as ApplicationListItem;
+    return { ...obj, hasResume, isPriority: false } as ApplicationListItem;
   }
 
   async applyToJob(data: ApplyData): Promise<IApplication> {
@@ -115,7 +118,9 @@ export class ApplicationService {
         job.title,
       );
 
-      return application!.populate([
+      // Populate outside of session context to avoid expired session errors
+      const populatedApplication = await this.applicationRepository.findById(application!._id.toString());
+      return populatedApplication!.populate([
         { path: 'job', select: 'title company location' },
         { path: 'applicant', select: 'firstName lastName email' },
       ]);
@@ -219,7 +224,12 @@ export class ApplicationService {
     });
 
     return {
-      data: sorted.map((application) => this.sanitizeApplicationForEmployer(application)),
+      data: sorted.map((application) => {
+        const applicantId = application.applicant?._id?.toString() || application.applicant?.toString();
+        const sanitized = this.sanitizeApplicationForEmployer(application);
+        sanitized.isPriority = premiumUserIds.has(applicantId);
+        return sanitized;
+      }),
       pagination: result.pagination,
     };
   }
@@ -259,6 +269,56 @@ export class ApplicationService {
       newStatus,
       job.title,
     );
+
+    // Send interview invite email if status is interview and note contains details
+    if (newStatus === ApplicationStatus.INTERVIEW && note) {
+      const applicant = await this.userRepository.findEmployeeByIdSelect(
+        application.applicant.toString(),
+        'firstName lastName email',
+      );
+      const company = await job.populate('company', 'name');
+      const companyName = (company.company as any)?.name || 'the company';
+
+      if (applicant?.email) {
+        // Parse interview details from note
+        const dateTimeLine = note.match(/Date:\s*(.+)/)?.[1]?.trim() || '';
+        const [datePart, timePart] = dateTimeLine.split(' at ').map(s => s.trim());
+        const typeMatch = note.match(/Type:\s*(.+)/);
+        const linkMatch = note.match(/Meeting Link:\s*(.+)/);
+        const locationMatch = note.match(/Location:\s*(.+)/);
+        const notesMatch = note.match(/Notes:\s*(.+)/);
+
+        this.emailService.sendInterviewInvite({
+          email: applicant.email,
+          firstName: applicant.firstName,
+          jobTitle: job.title,
+          companyName,
+          date: datePart || '',
+          time: timePart || '',
+          type: typeMatch?.[1]?.toLowerCase().includes('video') ? 'video'
+            : typeMatch?.[1]?.toLowerCase().includes('in-person') ? 'in-person' : 'phone',
+          meetingLink: linkMatch?.[1]?.trim(),
+          location: locationMatch?.[1]?.trim(),
+          notes: notesMatch?.[1]?.trim(),
+        });
+      }
+    }
+
+    // Send email for offer status
+    if (newStatus === ApplicationStatus.OFFER) {
+      const applicant = await this.userRepository.findEmployeeByIdSelect(
+        application.applicant.toString(),
+        'firstName lastName email',
+      );
+      if (applicant?.email) {
+        this.emailService.sendApplicationStatusUpdate(
+          applicant.email,
+          applicant.firstName,
+          job.title,
+          'offer',
+        );
+      }
+    }
 
     return application.populate([
       { path: 'job', select: 'title company location' },

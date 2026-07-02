@@ -33,8 +33,27 @@ export class AIController {
 
       const updateData: Record<string, unknown> = {};
       if (skills && skills.length > 0) updateData.skills = skills;
-      if (experience && experience.length > 0) updateData.experience = experience;
-      if (education && education.length > 0) updateData.education = education;
+      if (experience && experience.length > 0) {
+        updateData.experience = experience.map((exp: any) => ({
+          ...exp,
+          title: exp.title || 'Untitled Role',
+          company: exp.company || 'Unknown Company',
+          startDate: exp.startDate ? new Date(exp.startDate) : new Date(),
+          endDate: exp.endDate ? new Date(exp.endDate) : undefined,
+          current: exp.current ?? false,
+        }));
+      }
+      if (education && education.length > 0) {
+        updateData.education = education.map((edu: any) => ({
+          ...edu,
+          institution: edu.institution || 'Unknown Institution',
+          degree: edu.degree || 'Degree',
+          fieldOfStudy: edu.fieldOfStudy || edu.degree || 'General',
+          startDate: edu.startDate ? new Date(edu.startDate) : new Date(),
+          endDate: edu.endDate ? new Date(edu.endDate) : undefined,
+          current: edu.current ?? false,
+        }));
+      }
       if (bio) updateData.bio = bio;
       if (headline) updateData.headline = headline;
 
