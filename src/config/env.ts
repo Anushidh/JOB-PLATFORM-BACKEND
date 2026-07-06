@@ -78,7 +78,7 @@ const env: EnvConfig = {
   CLOUDINARY_API_SECRET: process.env.CLOUDINARY_API_SECRET || '',
   SENDGRID_API_KEY: process.env.SENDGRID_API_KEY || '',
   SMTP_FROM_NAME: process.env.SMTP_FROM_NAME || 'HireFlow',
-  SMTP_FROM_EMAIL: process.env.SMTP_FROM_EMAIL || 'noreply@hireflow.dev',
+  SMTP_FROM_EMAIL: process.env.SMTP_FROM_EMAIL || 'anushidh101@gmail.com',
   GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID || '',
   GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET || '',
   GOOGLE_CALLBACK_URL: process.env.GOOGLE_CALLBACK_URL || 'http://localhost:5000/api/v1/auth/oauth/google/callback',
