@@ -215,20 +215,14 @@ export class JobAlertService {
       </div>
     `;
 
-    const nodemailer = await import('nodemailer');
-    const transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST || 'smtp.gmail.com',
-      port: parseInt(process.env.SMTP_PORT || '587', 10),
-      secure: parseInt(process.env.SMTP_PORT || '587', 10) === 465,
-      auth: {
-        user: process.env.SMTP_USER || '',
-        pass: process.env.SMTP_PASS || '',
-      },
-    });
-
     try {
-      await transporter.sendMail({
-        from: `"${process.env.SMTP_FROM_NAME || 'Job Platform'}" <${process.env.SMTP_FROM_EMAIL || 'noreply@jobplatform.com'}>`,
+      const { Resend } = await import('resend');
+      const resend = new Resend(process.env.RESEND_API_KEY || '');
+      const fromName = process.env.SMTP_FROM_NAME || 'HireFlow';
+      const fromEmail = process.env.SMTP_FROM_EMAIL || 'onboarding@resend.dev';
+
+      await resend.emails.send({
+        from: `${fromName} <${fromEmail}>`,
         to: email,
         subject: `Job Alert: ${alertName} - New Matches Found`,
         html,

@@ -2,15 +2,10 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
-import * as Sentry from '@sentry/node';
 import env from './config/env';
-import { initSentry } from './config/sentry';
 import routes from './routes';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
 import { globalLimiter } from './middleware/rateLimiter';
-
-// Initialize Sentry early
-initSentry();
 
 const app = express();
 
@@ -57,11 +52,6 @@ app.use('/api/v1', routes);
 
 // 404 handler
 app.use(notFoundHandler);
-
-// Sentry error handler (must be before your custom error handler)
-if (env.SENTRY_DSN) {
-  Sentry.setupExpressErrorHandler(app);
-}
 
 // Error handler
 app.use(errorHandler);

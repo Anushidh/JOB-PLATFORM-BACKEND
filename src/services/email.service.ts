@@ -1,12 +1,9 @@
-import nodemailer from 'nodemailer';
+import { Resend } from 'resend';
 import env from '../config/env';
 
-interface EmailOptions {
-  to: string;
-  subject: string;
-  html: string;
-  text?: string;
-}
+const resend = new Resend(env.RESEND_API_KEY);
+
+const FROM = `${env.SMTP_FROM_NAME} <${env.SMTP_FROM_EMAIL}>`;
 
 interface EmailAttachment {
   filename: string;
@@ -15,29 +12,26 @@ interface EmailAttachment {
 }
 
 export class EmailService {
-  private transporter: nodemailer.Transporter;
-
-  constructor() {
-    this.transporter = nodemailer.createTransport({
-      host: env.SMTP_HOST,
-      port: env.SMTP_PORT,
-      secure: env.SMTP_PORT === 465,
-      auth: {
-        user: env.SMTP_USER,
-        pass: env.SMTP_PASS,
-      },
-    });
-  }
-
-  /** Sends an email using the configured SMTP transport; failures are logged but don't throw */
-  private async send(options: EmailOptions): Promise<void> {
+  /** Core send helper — failures are logged but never throw */
+  private async send(options: {
+    to: string;
+    subject: string;
+    html: string;
+    text?: string;
+    attachments?: EmailAttachment[];
+  }): Promise<void> {
     try {
-      await this.transporter.sendMail({
-        from: `"${env.SMTP_FROM_NAME}" <${env.SMTP_FROM_EMAIL}>`,
+      await resend.emails.send({
+        from: FROM,
         to: options.to,
         subject: options.subject,
         html: options.html,
         text: options.text,
+        attachments: options.attachments?.map((a) => ({
+          filename: a.filename,
+          content: a.content,
+          contentType: a.contentType,
+        })),
       });
     } catch (error) {
       console.error(`Failed to send email to ${options.to}:`, error);
@@ -52,28 +46,14 @@ export class EmailService {
     html: string,
     attachments: EmailAttachment[]
   ): Promise<void> {
-    try {
-      await this.transporter.sendMail({
-        from: `"${env.SMTP_FROM_NAME}" <${env.SMTP_FROM_EMAIL}>`,
-        to,
-        subject,
-        html,
-        attachments: attachments.map((a) => ({
-          filename: a.filename,
-          content: a.content,
-          contentType: a.contentType,
-        })),
-      });
-    } catch (error) {
-      console.error(`Failed to send email with attachment to ${to}:`, error);
-    }
+    await this.send({ to, subject, html, attachments });
   }
 
-  /** Sends a verification OTP email with a styled HTML template */
+  /** Sends a verification OTP email */
   async sendOtp(email: string, otp: string): Promise<void> {
     await this.send({
       to: email,
-      subject: 'Your Verification Code - Job Platform',
+      subject: 'Your Verification Code - HireFlow',
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
           <h2 style="color: #333;">Verify Your Email</h2>
@@ -89,11 +69,11 @@ export class EmailService {
     });
   }
 
-  /** Sends a welcome email after successful account registration */
+  /** Sends a welcome email after successful registration */
   async sendWelcome(email: string, firstName: string, role: string): Promise<void> {
     await this.send({
       to: email,
-      subject: `Welcome to Job Platform!`,
+      subject: 'Welcome to HireFlow!',
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
           <h2 style="color: #333;">Welcome, ${firstName}!</h2>
@@ -112,7 +92,7 @@ export class EmailService {
     });
   }
 
-  /** Sends an email notifying the applicant of a status change on their application */
+  /** Sends application status update to an applicant */
   async sendApplicationStatusUpdate(
     email: string,
     firstName: string,
@@ -147,7 +127,7 @@ export class EmailService {
     });
   }
 
-  /** Sends an email to the employer when a new application is received */
+  /** Notifies employer when a new application is received */
   async sendNewApplicationNotification(
     email: string,
     employerName: string,
@@ -171,11 +151,11 @@ export class EmailService {
     });
   }
 
-  /** Sends an account suspension notification email */
+  /** Sends account suspension notification */
   async sendAccountSuspended(email: string, firstName: string): Promise<void> {
     await this.send({
       to: email,
-      subject: 'Account Suspended - Job Platform',
+      subject: 'Account Suspended - HireFlow',
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
           <h2 style="color: #333;">Hi ${firstName},</h2>
@@ -186,7 +166,7 @@ export class EmailService {
     });
   }
 
-  /** Sends an interview invitation email with all scheduling details */
+  /** Sends an interview invitation with full scheduling details */
   async sendInterviewInvite(data: {
     email: string;
     firstName: string;
@@ -201,7 +181,9 @@ export class EmailService {
   }): Promise<void> {
     const { email, firstName, jobTitle, companyName, date, time, type, meetingLink, location, notes } = data;
 
-    const formattedDate = new Date(date).toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+    const formattedDate = new Date(date).toLocaleDateString('en-IN', {
+      weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
+    });
 
     let locationHtml = '';
     if (type === 'video' && meetingLink) {
@@ -219,7 +201,6 @@ export class EmailService {
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
           <h2 style="color: #333;">Hi ${firstName},</h2>
           <p>Great news! You've been invited for an interview at <strong>${companyName}</strong>.</p>
-          
           <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; margin: 20px 0;">
             <p style="margin: 0 0 8px;"><strong>Position:</strong> ${jobTitle}</p>
             <p style="margin: 0 0 8px;"><strong>Date:</strong> ${formattedDate}</p>
@@ -228,17 +209,14 @@ export class EmailService {
             ${locationHtml}
             ${notes ? `<p style="margin: 12px 0 0; padding-top: 12px; border-top: 1px solid #e2e8f0;"><strong>Additional Notes:</strong><br/>${notes}</p>` : ''}
           </div>
-
           <p style="margin-top: 20px;">
             <a href="${env.CORS_ORIGIN}/employee/applications" style="background: #2563eb; color: white; padding: 12px 24px; border-radius: 6px; text-decoration: none; display: inline-block;">
               View Application
             </a>
           </p>
-
           <p style="color: #64748b; margin-top: 20px; font-size: 14px;">Good luck with your interview! 🎉</p>
         </div>
       `,
     });
   }
 }
-

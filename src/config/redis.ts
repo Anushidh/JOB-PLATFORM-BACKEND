@@ -1,17 +1,28 @@
 import Redis from 'ioredis';
 import env from './env';
 
-const redis = new Redis({
-  host: env.REDIS_HOST,
-  port: env.REDIS_PORT,
-  password: env.REDIS_PASSWORD || undefined,
-  db: env.REDIS_DB,
-  retryStrategy(times) {
-    const delay = Math.min(times * 50, 2000);
-    return delay;
-  },
-  maxRetriesPerRequest: 3,
-});
+// Prefer REDIS_URL (e.g. Upstash on Render) over individual host/port vars
+const redis = env.REDIS_URL
+  ? new Redis(env.REDIS_URL, {
+      maxRetriesPerRequest: 3,
+      retryStrategy(times) {
+        const delay = Math.min(times * 50, 2000);
+        return delay;
+      },
+    })
+  : new Redis({
+      host: env.REDIS_HOST,
+      port: env.REDIS_PORT,
+      password: env.REDIS_PASSWORD || undefined,
+      db: env.REDIS_DB,
+      // Redis Cloud uses TLS on non-standard ports
+      tls: env.REDIS_PORT !== 6379 ? {} : undefined,
+      retryStrategy(times) {
+        const delay = Math.min(times * 50, 2000);
+        return delay;
+      },
+      maxRetriesPerRequest: 3,
+    });
 
 redis.on('connect', () => {
   console.log('Redis connected successfully');

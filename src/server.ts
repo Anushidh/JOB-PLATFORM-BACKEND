@@ -16,8 +16,12 @@ const startServer = async (): Promise<void> => {
     await seedAdmin();
 
     // Verify Redis connection
-    await redis.ping();
-    console.log('Redis connected successfully');
+    try {
+      await redis.ping();
+      console.log('Redis connected successfully');
+    } catch (error) {
+      console.warn('⚠️ Redis is not available at startup. Features requiring Redis may not work correctly.');
+    }
 
     // Start cron jobs
     startCronJobs();
