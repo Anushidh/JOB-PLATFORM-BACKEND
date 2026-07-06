@@ -50,8 +50,9 @@ const EmployeeSchema = new Schema<IEmployee>(
     },
     lastName: {
       type: String,
-      required: true,
+      required: false,
       trim: true,
+      default: '',
     },
     phone: { type: String },
     avatar: { type: String },
