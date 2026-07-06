@@ -1,7 +1,7 @@
-import { Resend } from 'resend';
+import sgMail from '@sendgrid/mail';
 import env from '../config/env';
 
-const resend = new Resend(env.RESEND_API_KEY);
+sgMail.setApiKey(env.SENDGRID_API_KEY);
 
 const FROM = `${env.SMTP_FROM_NAME} <${env.SMTP_FROM_EMAIL}>`;
 
@@ -21,7 +21,7 @@ export class EmailService {
     attachments?: EmailAttachment[];
   }): Promise<void> {
     try {
-      await resend.emails.send({
+      await sgMail.send({
         from: FROM,
         to: options.to,
         subject: options.subject,
@@ -29,8 +29,9 @@ export class EmailService {
         text: options.text,
         attachments: options.attachments?.map((a) => ({
           filename: a.filename,
-          content: a.content,
-          contentType: a.contentType,
+          content: a.content.toString('base64'),
+          type: a.contentType,
+          disposition: 'attachment',
         })),
       });
     } catch (error) {

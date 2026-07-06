@@ -22,7 +22,7 @@ interface EnvConfig {
   CLOUDINARY_CLOUD_NAME: string;
   CLOUDINARY_API_KEY: string;
   CLOUDINARY_API_SECRET: string;
-  RESEND_API_KEY: string;
+  SENDGRID_API_KEY: string;
   SMTP_FROM_NAME: string;
   SMTP_FROM_EMAIL: string;
   GOOGLE_CLIENT_ID: string;
@@ -76,9 +76,9 @@ const env: EnvConfig = {
   CLOUDINARY_CLOUD_NAME: process.env.CLOUDINARY_CLOUD_NAME || '',
   CLOUDINARY_API_KEY: process.env.CLOUDINARY_API_KEY || '',
   CLOUDINARY_API_SECRET: process.env.CLOUDINARY_API_SECRET || '',
-  RESEND_API_KEY: process.env.RESEND_API_KEY || '',
+  SENDGRID_API_KEY: process.env.SENDGRID_API_KEY || '',
   SMTP_FROM_NAME: process.env.SMTP_FROM_NAME || 'HireFlow',
-  SMTP_FROM_EMAIL: process.env.SMTP_FROM_EMAIL || 'onboarding@resend.dev',
+  SMTP_FROM_EMAIL: process.env.SMTP_FROM_EMAIL || 'noreply@hireflow.dev',
   GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID || '',
   GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET || '',
   GOOGLE_CALLBACK_URL: process.env.GOOGLE_CALLBACK_URL || 'http://localhost:5000/api/v1/auth/oauth/google/callback',

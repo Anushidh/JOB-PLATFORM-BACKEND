@@ -216,12 +216,12 @@ export class JobAlertService {
     `;
 
     try {
-      const { Resend } = await import('resend');
-      const resend = new Resend(process.env.RESEND_API_KEY || '');
+      const sgMail = (await import('@sendgrid/mail')).default;
+      sgMail.setApiKey(process.env.SENDGRID_API_KEY || '');
       const fromName = process.env.SMTP_FROM_NAME || 'HireFlow';
-      const fromEmail = process.env.SMTP_FROM_EMAIL || 'onboarding@resend.dev';
+      const fromEmail = process.env.SMTP_FROM_EMAIL || 'noreply@hireflow.dev';
 
-      await resend.emails.send({
+      await sgMail.send({
         from: `${fromName} <${fromEmail}>`,
         to: email,
         subject: `Job Alert: ${alertName} - New Matches Found`,
