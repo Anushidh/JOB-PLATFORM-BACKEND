@@ -15,8 +15,6 @@ const redis = env.REDIS_URL
       port: env.REDIS_PORT,
       password: env.REDIS_PASSWORD || undefined,
       db: env.REDIS_DB,
-      // Redis Cloud uses TLS on non-standard ports
-      tls: env.REDIS_PORT !== 6379 ? {} : undefined,
       retryStrategy(times) {
         const delay = Math.min(times * 50, 2000);
         return delay;
