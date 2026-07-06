@@ -30,7 +30,6 @@
     "@types/node-cron": "^3.0.11",
     "@types/passport": "^1.0.17",
     "@types/passport-google-oauth20": "^2.0.17",
-    "@types/passport-linkedin-oauth2": "^1.5.6",
     "@types/pdf-parse": "^1.1.5",
     "@types/pdfkit": "^0.17.6",
     "bcrypt": "^5.1.1",
@@ -49,7 +48,6 @@
     "openai": "^4.73.1",
     "passport": "^0.7.0",
     "passport-google-oauth20": "^2.0.0",
-    "passport-linkedin-oauth2": "^2.0.0",
     "pdf-parse": "^2.4.5",
     "pdfkit": "^0.19.1",
     "rate-limit-redis": "^5.0.0",
@@ -59,6 +57,5 @@
     "tsx": "^4.6.2",
     "typescript": "^5.3.3",
     "zod": "^3.22.4"
-  },
-  "devDependencies": {}
+  }
 }

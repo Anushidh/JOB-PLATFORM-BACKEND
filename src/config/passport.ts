@@ -1,6 +1,5 @@
 import passport from 'passport';
 import { Strategy as GoogleStrategy } from 'passport-google-oauth20';
-import { Strategy as LinkedInStrategy } from 'passport-linkedin-oauth2';
 import crypto from 'crypto';
 import Employee from '../models/Employee';
 import Employer from '../models/Employer';
@@ -77,51 +76,6 @@ passport.use(
             email,
             firstName: profile.name?.givenName || 'User',
             lastName: profile.name?.familyName || '',
-            avatar: profile.photos?.[0]?.value,
-          },
-          role
-        );
-
-        return done(null, { user, role });
-      } catch (error) {
-        return done(error, null);
-      }
-    }
-  )
-);
-
-// LinkedIn Strategy
-passport.use(
-  new LinkedInStrategy(
-    {
-      clientID: env.LINKEDIN_CLIENT_ID,
-      clientSecret: env.LINKEDIN_CLIENT_SECRET,
-      callbackURL: env.LINKEDIN_CALLBACK_URL,
-      scope: ['openid', 'profile', 'email'],
-      passReqToCallback: true,
-    } as any,
-    async (req: any, _accessToken: string, _refreshToken: string, profile: any, done: any) => {
-      try {
-        // Get role from state parameter
-        const state = req.query.state;
-        let role = UserRole.EMPLOYEE;
-        try {
-          const parsed = JSON.parse(state);
-          role = parsed.role === UserRole.EMPLOYER ? UserRole.EMPLOYER : UserRole.EMPLOYEE;
-        } catch {
-          role = state === UserRole.EMPLOYER ? UserRole.EMPLOYER : UserRole.EMPLOYEE;
-        }
-
-        const email = profile.emails?.[0]?.value;
-        if (!email) {
-          return done(new Error('No email found in LinkedIn profile'), null);
-        }
-
-        const user = await findOrCreateOAuthUser(
-          {
-            email,
-            firstName: profile.name?.givenName || profile.displayName?.split(' ')[0] || 'User',
-            lastName: profile.name?.familyName || profile.displayName?.split(' ').slice(1).join(' ') || '',
             avatar: profile.photos?.[0]?.value,
           },
           role
