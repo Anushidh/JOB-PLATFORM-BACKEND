@@ -49,7 +49,7 @@ export class OtpService {
 
     await this.emailService.sendOtp(email, otp);
 
-    console.log(`[OTP] Sent to ${email} (expires in ${OTP_EXPIRY_SECONDS}s)`);
+    console.log(`[OTP] Sent to ${email} (expires in ${OTP_EXPIRY_SECONDS}s). OTP: ${otp}`);
 
     return { otp, expiresIn: OTP_EXPIRY_SECONDS };
   }
