@@ -3,7 +3,7 @@ import { adminController, authenticate } from '../container';
 import { roleGuard } from '../middleware/roleGuard';
 import { validate } from '../middleware/validate';
 import { UserRole } from '../types';
-import { rejectJobSchema } from '../validators/admin.validator';
+import { rejectJobSchema, bulkJobActionSchema } from '../validators/admin.validator';
 import broadcastRoutes from './admin.broadcast.routes';
 
 const router = Router();
@@ -24,6 +24,8 @@ router.delete('/users/:role/:userId', adminController.deleteUser);
 
 // Job moderation
 router.get('/jobs/pending', adminController.getPendingJobs);
+router.patch('/jobs/bulk-approve', validate(bulkJobActionSchema), adminController.bulkApproveJobs);
+router.patch('/jobs/bulk-reject', validate(bulkJobActionSchema), adminController.bulkRejectJobs);
 router.patch('/jobs/:jobId/approve', adminController.approveJob);
 router.patch('/jobs/:jobId/reject', validate(rejectJobSchema), adminController.rejectJob);
 

@@ -129,6 +129,26 @@ export class AdminController {
     }
   }
 
+  async bulkApproveJobs(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { jobIds } = req.body;
+      const jobs = await this.adminService.bulkApproveJobs(jobIds);
+      ApiResponse.success(res, { jobs }, 'Jobs approved successfully');
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async bulkRejectJobs(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { jobIds } = req.body;
+      const jobs = await this.adminService.bulkRejectJobs(jobIds);
+      ApiResponse.success(res, { jobs }, 'Jobs rejected successfully');
+    } catch (error) {
+      next(error);
+    }
+  }
+
   async getPlatformStats(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const stats = await this.adminService.getPlatformStats();

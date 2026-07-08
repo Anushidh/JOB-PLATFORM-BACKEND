@@ -196,6 +196,32 @@ export class AdminService {
     return job.populate(['company', 'employer']);
   }
 
+  async bulkApproveJobs(jobIds: string[]): Promise<IJob[]> {
+    const results: IJob[] = [];
+    for (const jobId of jobIds) {
+      try {
+        const job = await this.approveJob(jobId);
+        results.push(job);
+      } catch (error) {
+        console.error(`[AdminService] Failed to bulk approve job ${jobId}:`, error);
+      }
+    }
+    return results;
+  }
+
+  async bulkRejectJobs(jobIds: string[]): Promise<IJob[]> {
+    const results: IJob[] = [];
+    for (const jobId of jobIds) {
+      try {
+        const job = await this.rejectJob(jobId);
+        results.push(job);
+      } catch (error) {
+        console.error(`[AdminService] Failed to bulk reject job ${jobId}:`, error);
+      }
+    }
+    return results;
+  }
+
   async getPlatformStats(): Promise<{
     totalEmployees: number;
     totalEmployers: number;
