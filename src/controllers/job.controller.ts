@@ -94,6 +94,7 @@ export class JobController {
         skills: req.query.skills ? (req.query.skills as string).split(',') : undefined,
         salaryMin: req.query.salaryMin ? parseInt(req.query.salaryMin as string) : undefined,
         salaryMax: req.query.salaryMax ? parseInt(req.query.salaryMax as string) : undefined,
+        company: req.query.company as string,
         companies: [] as string[],
       };
 

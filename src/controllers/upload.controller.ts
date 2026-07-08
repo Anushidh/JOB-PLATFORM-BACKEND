@@ -60,6 +60,30 @@ export class UploadController {
     }
   }
 
+  async uploadCompanyBanner(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      if (!req.file) {
+        throw ApiError.badRequest('No file uploaded');
+      }
+
+      const company = await this.companyRepository.findByOwner(req.userId!);
+      if (!company) {
+        throw ApiError.badRequest('You must create a company first');
+      }
+
+      const result = await this.uploadService.uploadBanner(req.file);
+
+      await this.companyRepository.update(company._id.toString(), { bannerUrl: result.url });
+
+      ApiResponse.success(res, {
+        url: result.url,
+        publicId: result.publicId,
+      }, 'Company banner uploaded successfully');
+    } catch (error) {
+      next(error);
+    }
+  }
+
   async uploadResume(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       if (!req.file) {

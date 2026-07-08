@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { uploadController, authenticate } from '../container';
 import { roleGuard } from '../middleware/roleGuard';
-import { uploadAvatar, uploadLogo, uploadResume, handleMulterError } from '../middleware/upload';
+import { uploadAvatar, uploadLogo, uploadBanner, uploadResume, handleMulterError } from '../middleware/upload';
 import { UserRole } from '../types';
 
 const router = Router();
@@ -24,6 +24,15 @@ router.post(
   uploadLogo,
   handleMulterError,
   uploadController.uploadCompanyLogo
+);
+
+// Company banner upload (employer only)
+router.post(
+  '/company-banner',
+  roleGuard(UserRole.EMPLOYER),
+  uploadBanner,
+  handleMulterError,
+  uploadController.uploadCompanyBanner
 );
 
 // Resume upload (employee only)

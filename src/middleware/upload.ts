@@ -43,6 +43,13 @@ export const uploadLogo = multer({
   limits: { fileSize: 2 * 1024 * 1024 }, // 2MB
 }).single('logo');
 
+// Company banner upload (max 5MB, wider images)
+export const uploadBanner = multer({
+  storage,
+  fileFilter: imageFilter,
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
+}).single('banner');
+
 // Resume upload (max 5MB)
 export const uploadResume = multer({
   storage,

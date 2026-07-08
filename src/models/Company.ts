@@ -10,6 +10,7 @@ const CompanySchema = new Schema<ICompany>(
     },
     description: { type: String },
     logoUrl: { type: String },
+    bannerUrl: { type: String },
     website: { type: String },
     industry: { type: String },
     size: { type: String },
