@@ -1,11 +1,15 @@
 import { Request, Response, NextFunction } from 'express';
 import { JobService } from '../services/job.service';
+import { CompanyFollowService } from '../services/companyFollow.service';
 import { ApiResponse } from '../utils/apiResponse';
 import { IEmployer, JobStatus, UserRole } from '../types';
 import { DEFAULT_PAGE, DEFAULT_LIMIT } from '../utils/constants';
 
 export class JobController {
-  constructor(private readonly jobService: JobService) {}
+  constructor(
+    private readonly jobService: JobService,
+    private readonly companyFollowService?: CompanyFollowService
+  ) {}
   async createJob(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const employer = req.user as IEmployer;
@@ -90,7 +94,17 @@ export class JobController {
         skills: req.query.skills ? (req.query.skills as string).split(',') : undefined,
         salaryMin: req.query.salaryMin ? parseInt(req.query.salaryMin as string) : undefined,
         salaryMax: req.query.salaryMax ? parseInt(req.query.salaryMax as string) : undefined,
+        companies: [] as string[],
       };
+
+      if (req.query.following === 'true' && req.userId && this.companyFollowService) {
+        const followed = await this.companyFollowService.getFollowedCompanies(req.userId);
+        filters.companies = followed.map((f) => (f.company as any)._id?.toString() || f.company.toString());
+        // If the user doesn't follow any companies, they shouldn't see any jobs.
+        if (filters.companies.length === 0) {
+          filters.companies = ['000000000000000000000000']; // Fake ID to match nothing
+        }
+      }
 
       const result = await this.jobService.getJobs(filters, { page, limit, sort, order });
       ApiResponse.paginated(res, result.data, result.pagination.total, page, limit);

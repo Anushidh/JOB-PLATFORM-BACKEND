@@ -15,6 +15,7 @@ export interface JobFilters {
   status?: string;
   employer?: string;
   company?: string;
+  companies?: string[];
 }
 
 export class JobRepository {
@@ -99,6 +100,9 @@ export class JobRepository {
     if (filters.salaryMax) query.salaryMin = { ...(query.salaryMin as object || {}), $lte: filters.salaryMax };
     if (filters.employer) query.employer = filters.employer;
     if (filters.company) query.company = filters.company;
+    if (filters.companies && filters.companies.length > 0) {
+      query.company = { $in: filters.companies };
+    }
 
     const [jobs, total] = await Promise.all([
       this.jobModel.find(query)
