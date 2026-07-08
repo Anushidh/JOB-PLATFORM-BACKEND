@@ -152,6 +152,11 @@ export class JobRepository {
     };
   }
 
+  async findIdsByEmployer(employerId: string): Promise<string[]> {
+    const jobs = await this.jobModel.find({ employer: employerId }).select('_id');
+    return jobs.map(j => j._id.toString());
+  }
+
   findAnalyticsByJob(jobId: string) {
     return this.jobAnalyticsModel.findOne({ job: jobId });
   }

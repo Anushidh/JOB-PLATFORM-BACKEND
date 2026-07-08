@@ -234,6 +234,27 @@ export class ApplicationService {
     };
   }
 
+  async getRecentEmployerApplications(
+    employerId: string,
+    limit: number,
+  ): Promise<ApplicationListItem[]> {
+    const jobIds = await this.jobRepository.findIdsByEmployer(employerId);
+    if (jobIds.length === 0) return [];
+
+    const applications = await this.applicationRepository.findRecentByJobs(jobIds, limit);
+
+    const applicantIds = applications.map(a => a.applicant?._id?.toString() || a.applicant?.toString());
+    const premiumSubs = await this.applicationRepository.findPremiumSubscriptions(applicantIds);
+    const premiumUserIds = new Set(premiumSubs.map(s => s.user.toString()));
+
+    return applications.map((application) => {
+      const applicantId = application.applicant?._id?.toString() || application.applicant?.toString();
+      const sanitized = this.sanitizeApplicationForEmployer(application);
+      sanitized.isPriority = premiumUserIds.has(applicantId);
+      return sanitized;
+    });
+  }
+
   async updateApplicationStatus(
     applicationId: string,
     employerId: string,

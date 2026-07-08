@@ -68,6 +68,19 @@ export class ApplicationController {
     }
   }
 
+  async getRecentEmployerApplications(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const limit = parseInt(req.query.limit as string) || 5;
+      const result = await this.applicationService.getRecentEmployerApplications(
+        req.userId!,
+        limit
+      );
+      ApiResponse.success(res, result, 'Recent applications retrieved successfully');
+    } catch (error) {
+      next(error);
+    }
+  }
+
   async updateApplicationStatus(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { status, note } = req.body;

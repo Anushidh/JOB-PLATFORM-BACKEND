@@ -106,6 +106,20 @@ export class ApplicationRepository {
     };
   }
 
+  async findRecentByJobs(jobIds: string[], limit: number): Promise<IApplication[]> {
+    return this.applicationModel.find({ job: { $in: jobIds } })
+      .populate({
+        path: 'applicant',
+        select: 'firstName lastName email phone skills avatar bio headline',
+      })
+      .populate({
+        path: 'job',
+        select: 'title company location',
+      })
+      .sort({ createdAt: -1 })
+      .limit(limit);
+  }
+
   findPremiumSubscriptions(applicantIds: string[]) {
     return this.subscriptionModel.find({
       user: { $in: applicantIds },
